@@ -16,8 +16,7 @@ export default function InvoicePreview({ data, lang = "en", currency = "USD" }) 
     // Indian GST expansions
     gstRegime = "standard", // "standard", "intrastate", "interstate"
     gstinSupplier = "",
-    gstinBuyer = "",
-    stampImage = "" // base64 processed stamp image
+    gstinBuyer = ""
   } = data;
 
   const formatCurrency = (val) => {
@@ -174,16 +173,6 @@ export default function InvoicePreview({ data, lang = "en", currency = "USD" }) 
             <span>Amount Due</span>
             <span style={{ fontWeight: "700" }}>{formatCurrency(total)}</span>
           </div>
-
-          {/* 
-            Ultra-Premium Transparent Background Stamp Overlay Placement:
-            Positioned absolutely within the invoice calculation frame with realistic rotation.
-          */}
-          {stampImage && (
-            <div className="stamp-overlay-container">
-              <img src={stampImage} alt="Official Stamp Seal" className="invoice-stamp-image" />
-            </div>
-          )}
         </div>
       </div>
 

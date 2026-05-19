@@ -11,7 +11,6 @@ export default function BillGenerator({ onSaveInvoice, onCancel, lang = "en", cu
   const [isScanning, setIsScanning] = useState(false);
   const [scanProgress, setScanProgress] = useState(0);
   const [scanStatus, setScanStatus] = useState("");
-  const [stampType, setStampType] = useState("none"); // "none", "preset", "custom"
   
   const t = translations[lang] || translations["en"];
   const symbol = currency === "INR" ? "₹" : "$";
@@ -29,12 +28,10 @@ export default function BillGenerator({ onSaveInvoice, onCancel, lang = "en", cu
     notes: "",
     gstRegime: "standard", // "standard", "intrastate", "interstate"
     gstinSupplier: "",
-    gstinBuyer: "",
-    stampImage: "" // base64 transparent stamp image
+    gstinBuyer: ""
   });
 
   const fileInputRef = useRef(null);
-  const stampInputRef = useRef(null);
 
   // Recalculate subtotals, taxes, and totals dynamically
   useEffect(() => {
@@ -49,107 +46,6 @@ export default function BillGenerator({ onSaveInvoice, onCancel, lang = "en", cu
       total: calculatedTotal
     }));
   }, [invoiceData.items, invoiceData.taxRate]);
-
-  // Synthesis in-memory of a premium PAID rubber seal stamp
-  const generatePaidPresetStamp = () => {
-    const canvas = document.createElement("canvas");
-    canvas.width = 240;
-    canvas.height = 120;
-    const ctx = canvas.getContext("2d");
-    
-    // Draw outer thick grunge stamp frame
-    ctx.strokeStyle = "rgba(185, 28, 28, 0.85)"; // Deep crimson stamp red
-    ctx.lineWidth = 4;
-    ctx.lineJoin = "miter";
-    ctx.strokeRect(10, 10, 220, 100);
-    
-    // Draw inner thin stamp frame
-    ctx.lineWidth = 1.5;
-    ctx.strokeRect(15, 15, 210, 90);
-    
-    // PAID main text
-    ctx.fillStyle = "rgba(185, 28, 28, 0.85)";
-    ctx.font = "bold 34px sans-serif";
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    ctx.fillText("PAID", 120, 48);
-    
-    // SECURE TRANSACTION subtext
-    ctx.font = "bold 11px sans-serif";
-    ctx.fillText("SECURE TRANSACTION", 120, 82);
-    
-    return canvas.toDataURL("image/png");
-  };
-
-  // Automated Canvas background key-out (white transparency chroma-key)
-  const processStampBackground = (file) => {
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const img = new Image();
-      img.onload = () => {
-        const canvas = document.createElement("canvas");
-        const ctx = canvas.getContext("2d");
-        
-        // Scale down to standard stamp size while retaining quality
-        const maxDim = 240;
-        let w = img.width;
-        let h = img.height;
-        if (w > maxDim || h > maxDim) {
-          if (w > h) {
-            h = Math.round((h * maxDim) / w);
-            w = maxDim;
-          } else {
-            w = Math.round((w * maxDim) / h);
-            h = maxDim;
-          }
-        }
-        
-        canvas.width = w;
-        canvas.height = h;
-        ctx.drawImage(img, 0, 0, w, h);
-        
-        const imgData = ctx.getImageData(0, 0, w, h);
-        const data = imgData.data;
-        
-        // Loop and strip white pixels
-        for (let i = 0; i < data.length; i += 4) {
-          const r = data[i];
-          const g = data[i+1];
-          const b = data[i+2];
-          
-          // Make all near-white paper pixels transparent
-          if (r > 200 && g > 200 && b > 200) {
-            data[i+3] = 0; // Set Alpha = 0 (Transparent)
-          }
-        }
-        
-        ctx.putImageData(imgData, 0, 0);
-        const processedUrl = canvas.toDataURL("image/png");
-        setInvoiceData(prev => ({
-          ...prev,
-          stampImage: processedUrl
-        }));
-      };
-      img.src = e.target.result;
-    };
-    reader.readAsDataURL(file);
-  };
-
-  const handleStampTypeChange = (type) => {
-    setStampType(type);
-    if (type === "none") {
-      setInvoiceData(prev => ({ ...prev, stampImage: "" }));
-    } else if (type === "preset") {
-      const stamp = generatePaidPresetStamp();
-      setInvoiceData(prev => ({ ...prev, stampImage: stamp }));
-    } else {
-      setInvoiceData(prev => ({ ...prev, stampImage: "" }));
-      if (stampInputRef.current) {
-        stampInputRef.current.click();
-      }
-    }
-  };
 
   // Handle OCR Tesseract scanning
   const processImage = (file) => {
@@ -248,8 +144,7 @@ export default function BillGenerator({ onSaveInvoice, onCancel, lang = "en", cu
       notes: "Prepared manually via premium editor template.",
       gstRegime: "intrastate",
       gstinSupplier: "27AAPCG2910R1Z2",
-      gstinBuyer: "27AADCB0910A1Z5",
-      stampImage: ""
+      gstinBuyer: "27AADCB0910A1Z5"
     });
     setStep(2);
   };
@@ -521,27 +416,6 @@ export default function BillGenerator({ onSaveInvoice, onCancel, lang = "en", cu
                   <option value="intrastate">{t.intrastateGST}</option>
                   <option value="interstate">{t.interstateGST}</option>
                 </select>
-              </div>
-              <div className="form-group">
-                <label htmlFor="stampType">Secure Corporate Stamp</label>
-                <select 
-                  id="stampType" 
-                  value={stampType}
-                  onChange={(e) => handleStampTypeChange(e.target.value)}
-                  className="select-pref"
-                  style={{ width: "100%", padding: "0.55rem" }}
-                >
-                  <option value="none">No Stamp Seal</option>
-                  <option value="preset">Preset PAID Stamp (Crimson)</option>
-                  <option value="custom">Upload Custom Stamp Image</option>
-                </select>
-                <input 
-                  type="file"
-                  ref={stampInputRef}
-                  onChange={(e) => processStampBackground(e.target.files[0])}
-                  accept="image/*"
-                  style={{ display: "none" }}
-                />
               </div>
             </div>
 
