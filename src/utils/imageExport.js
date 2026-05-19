@@ -19,8 +19,10 @@ export async function downloadInvoiceImage(elementId, invoiceNumber) {
       useCORS: true,
       backgroundColor: "#ffffff",
       logging: false,
-      width: element.scrollWidth,
-      height: element.scrollHeight
+      onclone: (clonedDoc) => {
+        const el = clonedDoc.getElementById(elementId);
+        if (el) el.style.transform = "none";
+      }
     });
 
     return new Promise((resolve, reject) => {
@@ -60,7 +62,11 @@ export async function captureInvoiceBlob(elementId) {
     scale: 1.5,
     useCORS: true,
     backgroundColor: "#ffffff",
-    logging: false
+    logging: false,
+    onclone: (clonedDoc) => {
+      const el = clonedDoc.getElementById(elementId);
+      if (el) el.style.transform = "none";
+    }
   });
   
   return new Promise((resolve) => {

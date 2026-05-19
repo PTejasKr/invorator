@@ -37,9 +37,22 @@ export default function InvoicePreview({ data, lang = "en", currency = "USD" }) 
   // Determine if HSN/SAC codes exist in this invoice
   const showHSN = items.some(item => item.hsnCode) || gstRegime !== "standard";
 
+  // Dynamic content scaling to prevent overflow on strict A4 format
+  const itemCount = items.length;
+  let dynamicScale = 1;
+  if (itemCount > 25) dynamicScale = 0.55;
+  else if (itemCount > 18) dynamicScale = 0.65;
+  else if (itemCount > 12) dynamicScale = 0.75;
+  else if (itemCount > 7) dynamicScale = 0.85;
+
   return (
     <div className="invoice-preview-wrapper" id="printable-invoice">
-      {/* Invoice Header */}
+      <div className="invoice-content-scaler" style={{ 
+        transform: `scale(${dynamicScale})`, 
+        transformOrigin: "top left", 
+        width: `${100 / dynamicScale}%` 
+      }}>
+        {/* Invoice Header */}
       <div className="inv-header">
         <div className="inv-logo-box">
           <div className="inv-company-name">{vendorName}</div>
@@ -182,6 +195,7 @@ export default function InvoicePreview({ data, lang = "en", currency = "USD" }) 
         <p style={{ marginTop: "0.25rem", color: "var(--text-muted)", fontSize: "0.7rem" }}>
           Encrypted & Generated Securely by InvoSafe / invorator.
         </p>
+      </div>
       </div>
     </div>
   );

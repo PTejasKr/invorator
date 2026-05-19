@@ -595,15 +595,35 @@ input:focus, select:focus, textarea:focus {
   font-size: 0.95rem;
 }
 
+.preview-scale-wrapper {
+  width: 100%;
+  aspect-ratio: 1 / 1.414;
+  overflow: hidden;
+  container-type: inline-size;
+  display: flex;
+  justify-content: center;
+  background-color: var(--bg-canvas);
+  border-radius: var(--radius-md);
+}
+
 .invoice-preview-wrapper {
   padding: 2.5rem;
   font-family: 'Plus Jakarta Sans', sans-serif;
   color: #334155;
   background: white;
-  aspect-ratio: 1 / 1.414; /* A4 Ratio */
+  
+  /* Strict A4 standard size */
+  width: 794px !important;
+  height: 1123px !important;
+  box-sizing: border-box;
+  
+  /* CSS Scale down to fit responsive preview pane */
+  transform: scale(calc(100cqi / 794));
+  transform-origin: top center;
+  
   font-size: 0.8rem;
   line-height: 1.4;
-  overflow-y: auto;
+  overflow: hidden; /* Strict cutoff, internal scaling prevents overflow */
 }
 
 /* Formal Clean Corporate Invoice Styling */
@@ -830,11 +850,19 @@ input:focus, select:focus, textarea:focus {
     width: 100% !important;
   }
   
+  .preview-scale-wrapper {
+    aspect-ratio: auto !important;
+    overflow: visible !important;
+    display: block !important;
+    background: transparent !important;
+  }
+  
   .invoice-preview-wrapper {
+    transform: none !important;
+    width: 100% !important;
+    height: auto !important;
     padding: 0 !important;
     margin: 0 !important;
-    width: 100% !important;
-    aspect-ratio: auto !important;
     overflow: visible !important;
   }
   
@@ -952,7 +980,8 @@ input:focus, select:focus, textarea:focus {
   }
 
   .invoice-preview-wrapper {
-    padding: 1.5rem !important;
+    /* Maintain scaled padding visually consistent */
+    padding: 2rem !important;
   }
 }
 

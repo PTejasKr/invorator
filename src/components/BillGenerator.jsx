@@ -213,7 +213,14 @@ export default function BillGenerator({ onSaveInvoice, onCancel, lang = "en", cu
       if (!canvasElement) return;
       
       // Grab direct transparent blob for Web Share API
-      const canvas = await import("html2canvas").then(h => h.default(canvasElement, { scale: 1.5, backgroundColor: "#ffffff" }));
+      const canvas = await import("html2canvas").then(h => h.default(canvasElement, { 
+        scale: 2, 
+        backgroundColor: "#ffffff",
+        onclone: (clonedDoc) => {
+          const el = clonedDoc.getElementById("printable-invoice");
+          if(el) el.style.transform = "none";
+        }
+      }));
       canvas.toBlob(async (blob) => {
         const result = await shareInvoice(invoiceData, blob);
         if (result.success && result.method === "fallback") {
@@ -552,7 +559,9 @@ export default function BillGenerator({ onSaveInvoice, onCancel, lang = "en", cu
                 {t.synchronized}
               </span>
             </div>
-            <InvoicePreview data={invoiceData} lang={lang} currency={currency} />
+            <div className="preview-scale-wrapper">
+              <InvoicePreview data={invoiceData} lang={lang} currency={currency} />
+            </div>
           </div>
         </div>
       )}
