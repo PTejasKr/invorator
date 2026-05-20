@@ -2,20 +2,13 @@ import React, { useState, useEffect } from "react";
 import Dashboard from "./components/Dashboard";
 import BillGenerator from "./components/BillGenerator";
 import InvoicePreview from "./components/InvoicePreview";
-import { encryptData, decryptData } from "./utils/encryption";
+import { encryptData, decryptData, getSystemMasterKey } from "./utils/encryption";
 import { languages } from "./utils/translations";
-import { loginWithGoogle, logout, onAuthStateChanged } from "./utils/firebase";
 import { captureInvoiceBlob, shareInvoice } from "./utils/imageExport";
 
 export default function App() {
   const [view, setView] = useState("dashboard"); // "dashboard", "generator"
   const [history, setHistory] = useState([]);
-  
-  
-  // Authentication states
-  const [user, setUser] = useState(null);
-  const [authLoading, setAuthLoading] = useState(true);
-  const [authError, setAuthError] = useState("");
   
   // Global Bilingual & Currency preferences
   const [lang, setLang] = useState(() => localStorage.getItem("_inv_lang") || "en");
@@ -24,19 +17,10 @@ export default function App() {
   // Temporary invoice state used for background printing layout
   const [activePrintInvoice, setActivePrintInvoice] = useState(null);
 
-  // Listen to Firebase Auth state
+  // Load encrypted database on mount automatically
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged((currentUser) => {
-      setUser(currentUser);
-      if (currentUser) {
-        // Automatically load database using UID as encryption key
-        loadDatabase(currentUser.uid);
-      } else {
-        setHistory([]);
-      }
-      setAuthLoading(false);
-    });
-    return () => unsubscribe();
+    const sysKey = getSystemMasterKey();
+    loadDatabase(sysKey);
   }, []);
 
   // Sync preferences to localStorage
@@ -80,28 +64,9 @@ export default function App() {
     }
   };
 
-  // Login handler
-  const handleLogin = async () => {
-    try {
-      setAuthError("");
-      await loginWithGoogle();
-    } catch (err) {
-      setAuthError("Failed to sign in with Google. Ensure Firebase is configured correctly.");
-    }
-  };
-
-  // Logout handler
-  const handleLogout = async () => {
-    try {
-      await logout();
-      setView("dashboard");
-    } catch (err) {
-      console.error(err);
-    }
-  };
-
   // Add new generated invoice to secure database
   const handleSaveInvoice = async (newInvoice) => {
+    const sysKey = getSystemMasterKey();
     const invoiceRecord = {
       ...newInvoice,
       id: Date.now() + Math.floor(Math.random() * 1000)
@@ -109,7 +74,7 @@ export default function App() {
     
     const updatedHistory = [invoiceRecord, ...history];
     setHistory(updatedHistory);
-    if (user) await saveDatabase(updatedHistory, user.uid);
+    await saveDatabase(updatedHistory, sysKey);
     setView("dashboard");
   };
 
@@ -117,9 +82,10 @@ export default function App() {
   const handleDeleteInvoice = async (invoiceId) => {
     if (!window.confirm("Are you sure you want to permanently delete this billing record?")) return;
     
+    const sysKey = getSystemMasterKey();
     const updatedHistory = history.filter(inv => inv.id !== invoiceId);
     setHistory(updatedHistory);
-    if (user) await saveDatabase(updatedHistory, user.uid);
+    await saveDatabase(updatedHistory, sysKey);
   };
 
   // Sibling trigger to print a past invoice
@@ -166,17 +132,8 @@ export default function App() {
     }, 500);
   };
 
-  // Render while checking auth
-  if (authLoading) {
-    return <div style={{ display: "flex", justifyContent: "center", alignItems: "center", height: "100vh", color: "white" }}>Loading Secure Session...</div>;
-  }
-
   return (
     <>
-      {/* 
-        CRITICAL BUG FIX: Renders the printable canvas as a direct sibling of the main .app-container
-        at the #root level. Prevents print-media styles from blanking out the layout!
-      */}
       {activePrintInvoice && (
         <div className="print-only-container">
           <InvoicePreview data={activePrintInvoice} lang={lang} currency={currency} />
@@ -193,85 +150,45 @@ export default function App() {
           </div>
           
           <div className="nav-actions">
-            {/* Global Preference Selectors */}
-            <div className="selector-group">
-              <select 
-                value={lang} 
-                onChange={(e) => handleLangChange(e.target.value)}
-                className="select-pref"
-                aria-label="Select Language"
-              >
-                {languages.map(l => (
-                  <option key={l.code} value={l.code}>{l.name}</option>
-                ))}
-              </select>
+            <div className="header-actions">
+              <div className="control-group">
+                <label>Lang:</label>
+                <select value={lang} onChange={(e) => handleLangChange(e.target.value)} className="control-select">
+                  {languages.map(l => (
+                    <option key={l.code} value={l.code}>{l.name}</option>
+                  ))}
+                </select>
+              </div>
+              
+              <div className="control-group">
+                <label>Cur:</label>
+                <select value={currency} onChange={(e) => handleCurrencyChange(e.target.value)} className="control-select">
+                  <option value="USD">USD ($)</option>
+                  <option value="INR">INR (₹)</option>
+                </select>
+              </div>
 
-              <select 
-                value={currency} 
-                onChange={(e) => handleCurrencyChange(e.target.value)}
-                className="select-pref"
-                aria-label="Select Currency"
-              >
-                <option value="USD">USD ($)</option>
-                <option value="INR">INR (₹)</option>
-              </select>
-            </div>
-
-            {user && (
-              <>
-                <span className="badge-standard" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                  <img src={user.photoURL} alt="Profile" style={{ width: '20px', height: '20px', borderRadius: '50%' }} />
-                  {user.displayName}
-                </span>
-                
-                {view !== "dashboard" && (
-                  <button className="btn btn-secondary" onClick={() => setView("dashboard")}>
-                    ← Back to Dashboard
-                  </button>
-                )}
-                
-                <button className="btn btn-danger btn-sm" onClick={handleLogout}>
-                  Sign Out
+              {view !== "dashboard" && (
+                <button className="btn btn-secondary" onClick={() => setView("dashboard")}>
+                  ← Back to Dashboard
                 </button>
-              </>
-            )}
+              )}
+            </div>
           </div>
         </header>
 
-        {/* Firebase Google Auth Login Screen */}
-        {!user && (
-          <div className="vault-lock-screen">
-            <h1 className="premium-logo" style={{ fontSize: "3.5rem", marginBottom: "0.5rem", color: "white" }}>invorator.</h1>
-            <p style={{ color: "var(--text-muted)", fontSize: "1rem", marginBottom: "2rem" }}>
-              Secure Client-Side Invoice Platform
-            </p>
-            <button className="btn btn-primary" onClick={handleLogin} style={{ padding: "1rem 2rem", fontSize: "1.1rem", display: "flex", gap: "0.5rem", alignItems: "center" }}>
-              <svg viewBox="0 0 24 24" width="24" height="24" xmlns="http://www.w3.org/2000/svg">
-                <path fill="#ffffff" d="M12.545,10.239v3.821h5.445c-0.712,2.315-2.647,3.972-5.445,3.972c-3.332,0-6.033-2.701-6.033-6.032s2.701-6.032,6.033-6.032c1.498,0,2.866,0.549,3.921,1.453l2.814-2.814C17.503,2.988,15.139,2,12.545,2C7.021,2,2.543,6.477,2.543,12s4.478,10,10.002,10c8.396,0,10.249-7.85,9.426-11.748L12.545,10.239z"/>
-              </svg>
-              Continue with Google
-            </button>
-            {authError && (
-              <p style={{ color: "var(--error)", fontSize: "0.9rem", marginTop: "1rem" }}>
-                {authError}
-              </p>
-            )}
-          </div>
-        )}
-
         {/* Core Views Routing Dashboard & Editor */}
-        {user && (
-          <main style={{ minHeight: "70vh" }}>
-            {view === "dashboard" ? (
-              <Dashboard 
-                history={history}
-                lang={lang}
-                currency={currency}
-                onStartGenerator={() => setView("generator")}
-                onDeleteInvoice={handleDeleteInvoice}
-                onPrintInvoice={handlePrintPastInvoice}
-                onShareInvoice={handleSharePastInvoice}
-              />
+        <main style={{ minHeight: "70vh" }}>
+          {view === "dashboard" ? (
+            <Dashboard 
+              history={history}
+              lang={lang}
+              currency={currency}
+              onStartGenerator={() => setView("generator")}
+              onDeleteInvoice={handleDeleteInvoice}
+              onPrintInvoice={handlePrintPastInvoice}
+              onShareInvoice={handleSharePastInvoice}
+            />
             ) : (
               <BillGenerator 
                 lang={lang}
@@ -281,7 +198,6 @@ export default function App() {
               />
             )}
           </main>
-        )}
       </div>
     </>
   );
