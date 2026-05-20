@@ -162,7 +162,8 @@ export function parseOCRText(rawText) {
     if (billingKeywords.test(line)) continue;
 
     // Look for: [Text Description] followed by a price towards the end
-    const itemMatch = line.match(/^(.+?)\s+(\d{1,4}[\.,]\d{2})$/);
+    // Tolerates currency symbols and some trailing non-digits. Requires at least one letter in description.
+    const itemMatch = line.match(/^(.+?[a-zA-Z].*?)\s+[$£€₹]?\s*(\d{1,6}(?:[.,]\d{3})*(?:[.,]\d{2}))[^\d]*$/i);
     if (itemMatch) {
       const desc = itemMatch[1].trim();
       const price = parseFloat(itemMatch[2].replace(",", "."));

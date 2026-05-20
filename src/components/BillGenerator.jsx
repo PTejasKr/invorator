@@ -197,13 +197,17 @@ export default function BillGenerator({ onSaveInvoice, onCancel, lang = "en", cu
     }));
   };
 
-  // High-dpi image capturing
-  const handleSaveAsImage = async () => {
-    try {
-      await downloadInvoiceImage("printable-invoice", invoiceData.invoiceNumber);
-    } catch (e) {
-      alert("Failed to export image.");
+  // Save to dashboard without printing
+  const handleSaveOnly = () => {
+    if (!invoiceData.vendorName) {
+      alert("Please provide a valid Merchant/Vendor Name.");
+      return;
     }
+    
+    onSaveInvoice({
+      ...invoiceData,
+      currency: currency
+    });
   };
 
   // Web Share API trigger
@@ -539,8 +543,8 @@ export default function BillGenerator({ onSaveInvoice, onCancel, lang = "en", cu
               <button className="btn btn-secondary" onClick={onCancel} style={{ flex: 1, minWidth: "120px" }}>
                 {t.btnCancel}
               </button>
-              <button className="btn btn-secondary" onClick={handleSaveAsImage} style={{ flex: 1, minWidth: "120px" }}>
-                📸 {t.btnDownloadImg}
+              <button className="btn btn-secondary" onClick={handleSaveOnly} style={{ flex: 1, minWidth: "120px" }}>
+                💾 Save Invoice
               </button>
               <button className="btn btn-secondary" onClick={handleShareInvoice} style={{ flex: 1, minWidth: "120px" }}>
                 🔗 {t.btnShare}
