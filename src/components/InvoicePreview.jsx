@@ -24,8 +24,24 @@ export default function InvoicePreview({ data, lang = "en", currency = "INR" }) 
 
   const {
     vendorName = "PURPLE BEAN AGRO INDUSTRIES PRIVATE LIMITED",
+    vendorAddress = "CTS NO. 1174 Bombay Puna Road Pimpri Chinchwad Pune, Pune, Maharashtra, 411012",
+    vendorPhone = "7718781594",
+    vendorEmail = "sales@pbai.in",
+    vendorPAN = "AAPCP3820M",
+    vendorStateCode = "27",
+    clientName = "MAPRICOT FOODS PRIVATE LIMITED",
+    clientAddress = "GROUND FLOOR GAT NO 58 KHANDOBACHI WADI Dhanore Pune, Pune, Maharashtra, 412105",
+    clientState = "Maharashtra",
+    clientStateCode = "27",
+    consigneeSameAsClient = true,
+    consigneeName = "",
+    consigneeAddress = "",
+    consigneeGSTIN = "",
+    consigneeState = "",
+    consigneeStateCode = "",
     invoiceNumber = "TI-26-27-64",
     date = new Date().toISOString().split("T")[0],
+    reverseCharge = "No",
     items = [],
     subtotal = 0,
     taxRate = 0,
@@ -33,7 +49,12 @@ export default function InvoicePreview({ data, lang = "en", currency = "INR" }) 
     total = 0,
     notes = "Thank you for your business",
     gstinSupplier = "27AAPCP3820M1ZX",
-    gstinBuyer = "27AANCM7223M1ZX"
+    gstinBuyer = "27AANCM7223M1ZX",
+    bankName = "IDFC FIRST Bank",
+    accountName = "PURPLE BEAN AGRO INDUSTRIES PRIVATE LIMITED",
+    accountNumber = "10227953860",
+    ifscCode = "IDFB0041438",
+    branchName = "CHAKAN BRANCH"
   } = data;
 
   // Format currency without the symbol for the table, symbol is added where needed or defined in header
@@ -46,13 +67,12 @@ export default function InvoicePreview({ data, lang = "en", currency = "INR" }) 
   
   const formatCurrency = (val) => "₹ " + formatNum(val);
 
-  // Default hardcoded values from template
-  const buyerName = "MAPRICOT FOODS PRIVATE LIMITED";
-  const buyerAddress = "GROUND FLOOR GAT NO 58 KHANDOBACHI WADI Dhanore Pune, Pune, Maharashtra, 412105";
-  const sellerAddress = "CTS NO. 1174 Bombay Puna Road Pimpri Chinchwad Pune, Pune, Maharashtra, 411012";
-  const sellerPhone = "7718781594";
-  const sellerEmail = "sales@pbai.in";
-  const sellerPAN = "AAPCP3820M";
+  // Helper to get consignee data
+  const finalConsigneeName = consigneeSameAsClient ? clientName : (consigneeName || clientName);
+  const finalConsigneeAddress = consigneeSameAsClient ? clientAddress : (consigneeAddress || clientAddress);
+  const finalConsigneeGSTIN = consigneeSameAsClient ? gstinBuyer : (consigneeGSTIN || gstinBuyer);
+  const finalConsigneeState = consigneeSameAsClient ? clientState : (consigneeState || clientState);
+  const finalConsigneeStateCode = consigneeSameAsClient ? clientStateCode : (consigneeStateCode || clientStateCode);
   
   // Dynamic totals for the bottom row of the items table
   let sumQty = 0;
@@ -88,7 +108,7 @@ export default function InvoicePreview({ data, lang = "en", currency = "INR" }) 
         <td></td>
         <td></td>
         <td className="text-center">{qty}</td>
-        <td className="text-center">KGS</td>
+        <td className="text-center">{item.unit || "PCS"}</td>
         <td className="text-right">{formatNum(rate)}</td>
         <td className="text-right">{formatNum(taxableValue)}</td>
         <td className="text-center">{halfRate.toFixed(2)}%</td>
@@ -168,13 +188,13 @@ export default function InvoicePreview({ data, lang = "en", currency = "INR" }) 
             <tr>
               <td colSpan="15" className="gst-vendor-details">
                 <h2>{vendorName.toUpperCase()}</h2>
-                <p>{sellerAddress}</p>
-                <p>📞 {sellerPhone} &nbsp; ✉ {sellerEmail}</p>
+                <p>{vendorAddress}</p>
+                <p>📞 {vendorPhone} &nbsp; ✉ {vendorEmail}</p>
                 <p>
                   <strong>GSTIN :</strong> {gstinSupplier} 
-                  <span className="gst-badge-box ml-2">State Code : 27</span>
+                  {vendorStateCode && <span className="gst-badge-box ml-2">State Code : {vendorStateCode}</span>}
                 </p>
-                <p><strong>PAN :</strong> {sellerPAN}</p>
+                <p><strong>PAN :</strong> {vendorPAN}</p>
               </td>
             </tr>
 
@@ -185,10 +205,10 @@ export default function InvoicePreview({ data, lang = "en", currency = "INR" }) 
                   <div className="gst-section-title">Details of Receiver | Billed to</div>
                   <table className="gst-inner-layout">
                     <tbody>
-                      <tr><td width="50">Name:</td><td><strong>{buyerName}</strong></td></tr>
-                      <tr><td>Address:</td><td>{buyerAddress}</td></tr>
-                      <tr><td>GSTIN:</td><td>{gstinBuyer} <span className="gst-badge-box ml-1">State Code : 27</span></td></tr>
-                      <tr><td>State:</td><td>Maharashtra</td></tr>
+                      <tr><td width="50">Name:</td><td><strong>{clientName}</strong></td></tr>
+                      <tr><td>Address:</td><td>{clientAddress}</td></tr>
+                      <tr><td>GSTIN:</td><td>{gstinBuyer} {clientStateCode && <span className="gst-badge-box ml-1">State Code : {clientStateCode}</span>}</td></tr>
+                      <tr><td>State:</td><td>{clientState}</td></tr>
                     </tbody>
                   </table>
                 </div>
@@ -206,7 +226,7 @@ export default function InvoicePreview({ data, lang = "en", currency = "INR" }) 
                     </tr>
                     <tr>
                       <td colSpan="2" className="p-2">
-                        Reverse Charge<br/><strong>NO</strong>
+                        Reverse Charge<br/><strong>{reverseCharge?.toUpperCase() || "NO"}</strong>
                       </td>
                     </tr>
                   </tbody>
@@ -221,10 +241,10 @@ export default function InvoicePreview({ data, lang = "en", currency = "INR" }) 
                   <div className="gst-section-title">Details of Consignee | Shipped to</div>
                   <table className="gst-inner-layout">
                     <tbody>
-                      <tr><td width="50">Name:</td><td><strong>{buyerName}</strong></td></tr>
-                      <tr><td>Address:</td><td>{buyerAddress}</td></tr>
-                      <tr><td>GSTIN:</td><td>{gstinBuyer}</td></tr>
-                      <tr><td>State:</td><td>Maharashtra</td></tr>
+                      <tr><td width="50">Name:</td><td><strong>{finalConsigneeName}</strong></td></tr>
+                      <tr><td>Address:</td><td>{finalConsigneeAddress}</td></tr>
+                      <tr><td>GSTIN:</td><td>{finalConsigneeGSTIN} {finalConsigneeStateCode && <span className="gst-badge-box ml-1">State Code: {finalConsigneeStateCode}</span>}</td></tr>
+                      <tr><td>State:</td><td>{finalConsigneeState}</td></tr>
                     </tbody>
                   </table>
                 </div>
@@ -373,11 +393,11 @@ export default function InvoicePreview({ data, lang = "en", currency = "INR" }) 
                 <div className="mb-1"><strong>🏦 Bank and Payment Details</strong></div>
                 <table className="gst-inner-layout ml-2">
                   <tbody>
-                    <tr><td width="150">Account Name</td><td className="text-right"><strong>{vendorName}</strong></td></tr>
-                    <tr><td>Account No.</td><td className="text-right"><strong>10227953860</strong></td></tr>
-                    <tr><td>IFSC Code</td><td className="text-right"><strong>IDFB0041438</strong></td></tr>
-                    <tr><td>Bank Name</td><td className="text-right"><strong>IDFC FIRST Bank</strong></td></tr>
-                    <tr><td>Branch Name</td><td className="text-right"><strong>CHAKAN BRANCH</strong></td></tr>
+                    <tr><td width="150">Account Name</td><td className="text-right"><strong>{accountName}</strong></td></tr>
+                    <tr><td>Account No.</td><td className="text-right"><strong>{accountNumber}</strong></td></tr>
+                    <tr><td>IFSC Code</td><td className="text-right"><strong>{ifscCode}</strong></td></tr>
+                    <tr><td>Bank Name</td><td className="text-right"><strong>{bankName}</strong></td></tr>
+                    <tr><td>Branch Name</td><td className="text-right"><strong>{branchName}</strong></td></tr>
                   </tbody>
                 </table>
               </td>
@@ -387,13 +407,15 @@ export default function InvoicePreview({ data, lang = "en", currency = "INR" }) 
             <tr>
               <td colSpan="15" className="gst-terms border-top-thick">
                 <div className="mb-1"><strong>Terms And Conditions</strong></div>
-                <ol>
-                  <li>This is an electronically generated document.</li>
-                  <li>All disputes are subject to Pune city jurisdiction.</li>
-                  <li>Payment Terms: 100% Advance</li>
-                  <li>1.5% per month interest to be levied after the said term and date of delivery.</li>
-                  <li>Quality of Goods as per specifications and Description mentioned.</li>
-                </ol>
+                {notes ? (
+                  <pre style={{ fontFamily: "inherit", whiteSpace: "pre-wrap", margin: 0, fontSize: "0.8rem", lineHeight: "1.4" }}>{notes}</pre>
+                ) : (
+                  <ol>
+                    <li>This is an electronically generated document.</li>
+                    <li>All disputes are subject to local jurisdiction.</li>
+                    <li>Payment Terms: 100% Advance</li>
+                  </ol>
+                )}
                 <div className="text-center mt-3 mb-1" style={{fontStyle:"italic", fontSize:"0.75rem"}}>
                   Thankyou for your business
                 </div>

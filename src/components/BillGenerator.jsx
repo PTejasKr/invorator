@@ -18,8 +18,24 @@ export default function BillGenerator({ onSaveInvoice, onCancel, lang = "en", cu
   // Invoice form state with GST additions
   const [invoiceData, setInvoiceData] = useState({
     vendorName: "",
+    vendorAddress: "",
+    vendorPhone: "",
+    vendorEmail: "",
+    vendorPAN: "",
+    vendorStateCode: "",
+    clientName: "",
+    clientAddress: "",
+    clientState: "",
+    clientStateCode: "",
+    consigneeSameAsClient: true,
+    consigneeName: "",
+    consigneeAddress: "",
+    consigneeGSTIN: "",
+    consigneeState: "",
+    consigneeStateCode: "",
     invoiceNumber: "",
     date: "",
+    reverseCharge: "No",
     items: [],
     taxRate: 18, // GST Indian standard is typically 18%
     taxAmount: 0,
@@ -28,7 +44,12 @@ export default function BillGenerator({ onSaveInvoice, onCancel, lang = "en", cu
     notes: "",
     gstRegime: "standard", // "standard", "intrastate", "interstate"
     gstinSupplier: "",
-    gstinBuyer: ""
+    gstinBuyer: "",
+    bankName: "",
+    accountName: "",
+    accountNumber: "",
+    ifscCode: "",
+    branchName: ""
   });
 
   const fileInputRef = useRef(null);
@@ -85,7 +106,8 @@ export default function BillGenerator({ onSaveInvoice, onCancel, lang = "en", cu
             items: parsed.items?.map(item => ({
               ...item,
               id: Date.now() + Math.random(),
-              hsnCode: ""
+              hsnCode: "",
+              unit: "PCS"
             })) || []
           }));
           setStep(2);
@@ -132,19 +154,40 @@ export default function BillGenerator({ onSaveInvoice, onCancel, lang = "en", cu
   const handleManualStart = () => {
     setInvoiceData({
       vendorName: "Merchant Enterprise",
+      vendorAddress: "123 Business Rd\nCity, State 12345",
+      vendorPhone: "+91 9876543210",
+      vendorEmail: "billing@merchant.com",
+      vendorPAN: "ABCDE1234F",
+      vendorStateCode: "27",
+      clientName: "Acme Corp",
+      clientAddress: "456 Client St\nCity, State 67890",
+      clientState: "Maharashtra",
+      clientStateCode: "27",
+      consigneeSameAsClient: true,
+      consigneeName: "",
+      consigneeAddress: "",
+      consigneeGSTIN: "",
+      consigneeState: "",
+      consigneeStateCode: "",
       invoiceNumber: "INV-" + Math.floor(100000 + Math.random() * 900000),
       date: new Date().toISOString().split("T")[0],
+      reverseCharge: "No",
       items: [
-        { id: Date.now(), description: "Standard Professional Consulting", quantity: 1, rate: 1000, hsnCode: "998311", total: 1000 }
+        { id: Date.now(), description: "Standard Professional Consulting", quantity: 1, rate: 1000, hsnCode: "998311", unit: "PCS", total: 1000 }
       ],
       taxRate: 18,
       taxAmount: 180,
       subtotal: 1000,
       total: 1180,
-      notes: "Prepared manually via premium editor template.",
+      notes: "1. Payment due within 30 days.\n2. Subject to local jurisdiction.",
       gstRegime: "intrastate",
       gstinSupplier: "27AAPCG2910R1Z2",
-      gstinBuyer: "27AADCB0910A1Z5"
+      gstinBuyer: "27AADCB0910A1Z5",
+      bankName: "HDFC Bank",
+      accountName: "Merchant Enterprise",
+      accountNumber: "12345678901234",
+      ifscCode: "HDFC0001234",
+      branchName: "Main Branch"
     });
     setStep(2);
   };
@@ -160,7 +203,7 @@ export default function BillGenerator({ onSaveInvoice, onCancel, lang = "en", cu
     setInvoiceData(prev => {
       const updatedItems = prev.items.map(item => {
         if (item.id === itemId) {
-          const updatedVal = (field === "description" || field === "hsnCode") ? value : parseFloat(value) || 0;
+          const updatedVal = (field === "description" || field === "hsnCode" || field === "unit") ? value : parseFloat(value) || 0;
           const updatedItem = { ...item, [field]: updatedVal };
           updatedItem.total = Math.round((updatedItem.quantity * updatedItem.rate) * 100) / 100;
           return updatedItem;
@@ -178,6 +221,7 @@ export default function BillGenerator({ onSaveInvoice, onCancel, lang = "en", cu
       quantity: 1,
       rate: 100,
       hsnCode: "",
+      unit: "PCS",
       total: 100
     };
     setInvoiceData(prev => ({
@@ -461,18 +505,19 @@ export default function BillGenerator({ onSaveInvoice, onCancel, lang = "en", cu
             <div className="form-group">
               <label>{t.labelItems}</label>
               <div className="items-editor">
-                <div className="items-editor-header" style={{ gridTemplateColumns: invoiceData.gstRegime !== "standard" ? "1.8fr 1fr 0.6fr 0.8fr 0.8fr 0.4fr" : "2fr 0.6fr 1fr 1fr 0.4fr" }}>
+                <div className="items-editor-header" style={{ gridTemplateColumns: invoiceData.gstRegime !== "standard" ? "1.8fr 1fr 0.6fr 0.6fr 0.8fr 0.8fr 0.4fr" : "2fr 0.6fr 0.6fr 1fr 1fr 0.4fr" }}>
                   <span>Description</span>
                   {invoiceData.gstRegime !== "standard" && <span>{t.labelHSN}</span>}
                   <span style={{ textAlign: "center" }}>Qty</span>
+                  <span style={{ textAlign: "center" }}>{t.unitOfMeasurement || "Unit"}</span>
                   <span style={{ textAlign: "right" }}>Rate ({symbol})</span>
                   <span style={{ textAlign: "right" }}>Amount ({symbol})</span>
                   <span></span>
                 </div>
                 
                 {invoiceData.items.map((item) => (
-                  <div key={item.id} className="item-row" style={{ gridTemplateColumns: invoiceData.gstRegime !== "standard" ? "1.8fr 1fr 0.6fr 0.8fr 0.8fr 0.4fr" : "2fr 0.6fr 1fr 1fr 0.4fr" }}>
-                    <input 
+                  <div key={item.id} className="item-row" style={{ gridTemplateColumns: invoiceData.gstRegime !== "standard" ? "1.8fr 1fr 0.6fr 0.6fr 0.8fr 0.8fr 0.4fr" : "2fr 0.6fr 0.6fr 1fr 1fr 0.4fr" }}>
+                    <input  
                       type="text"
                       value={item.description}
                       onChange={(e) => handleItemChange(item.id, "description", e.target.value)}
@@ -494,6 +539,12 @@ export default function BillGenerator({ onSaveInvoice, onCancel, lang = "en", cu
                       value={item.quantity}
                       onChange={(e) => handleItemChange(item.id, "quantity", e.target.value)}
                       style={{ padding: "0.4rem 0.6rem", fontSize: "0.85rem", textAlign: "center" }}
+                    />
+                    <input 
+                      type="text"
+                      value={item.unit || "PCS"}
+                      onChange={(e) => handleItemChange(item.id, "unit", e.target.value)}
+                      style={{ padding: "0.4rem 0.6rem", fontSize: "0.85rem", textAlign: "center", textTransform: "uppercase" }}
                     />
                     <input 
                       type="number"
@@ -527,14 +578,135 @@ export default function BillGenerator({ onSaveInvoice, onCancel, lang = "en", cu
               </button>
             </div>
 
-            <div className="form-group">
-              <label htmlFor="notes">{t.labelNotes}</label>
+            {/* Advanced Google Form-Style Sections */}
+            <h2 style={{ fontSize: "1.1rem", marginTop: "1rem", color: "var(--primary)", borderBottom: "1px solid var(--border)", paddingBottom: "0.25rem" }}>
+              {t.advancedFormTitle}
+            </h2>
+
+            {/* Vendor Details Form Card */}
+            <div style={{ backgroundColor: "var(--bg-canvas)", border: "1px solid var(--border)", borderRadius: "8px", padding: "1rem", marginTop: "1rem", borderTop: "4px solid var(--primary)" }}>
+              <h3 style={{ fontSize: "0.95rem", marginBottom: "1rem" }}>{t.vendorDetails}</h3>
+              <div className="form-group-row">
+                <div className="form-group">
+                  <label>{t.vendorPAN}</label>
+                  <input type="text" value={invoiceData.vendorPAN} onChange={(e) => handleInputChange("vendorPAN", e.target.value.toUpperCase())} placeholder="ABCDE1234F" />
+                </div>
+                <div className="form-group">
+                  <label>{t.vendorStateCode}</label>
+                  <input type="text" value={invoiceData.vendorStateCode} onChange={(e) => handleInputChange("vendorStateCode", e.target.value)} placeholder="e.g. 27" />
+                </div>
+              </div>
+              <div className="form-group-row">
+                <div className="form-group">
+                  <label>{t.vendorPhone}</label>
+                  <input type="text" value={invoiceData.vendorPhone} onChange={(e) => handleInputChange("vendorPhone", e.target.value)} placeholder="+91 XXXXXXXXXX" />
+                </div>
+                <div className="form-group">
+                  <label>{t.vendorEmail}</label>
+                  <input type="text" value={invoiceData.vendorEmail} onChange={(e) => handleInputChange("vendorEmail", e.target.value)} placeholder="contact@merchant.com" />
+                </div>
+              </div>
+              <div className="form-group">
+                <label>{t.vendorAddress}</label>
+                <textarea rows="2" value={invoiceData.vendorAddress} onChange={(e) => handleInputChange("vendorAddress", e.target.value)} placeholder="Building, Street, City, State..." />
+              </div>
+            </div>
+
+            {/* Client & Consignee Details Form Card */}
+            <div style={{ backgroundColor: "var(--bg-canvas)", border: "1px solid var(--border)", borderRadius: "8px", padding: "1rem", marginTop: "1rem", borderTop: "4px solid var(--accent)" }}>
+              <h3 style={{ fontSize: "0.95rem", marginBottom: "1rem" }}>{t.clientDetails}</h3>
+              <div className="form-group-row">
+                <div className="form-group">
+                  <label>Client Name</label>
+                  <input type="text" value={invoiceData.clientName} onChange={(e) => handleInputChange("clientName", e.target.value)} placeholder="Client Company" />
+                </div>
+                <div className="form-group">
+                  <label>{t.clientState} & {t.clientStateCode}</label>
+                  <div style={{ display: "flex", gap: "0.5rem" }}>
+                    <input type="text" value={invoiceData.clientState} onChange={(e) => handleInputChange("clientState", e.target.value)} placeholder="State" style={{ flex: 2 }} />
+                    <input type="text" value={invoiceData.clientStateCode} onChange={(e) => handleInputChange("clientStateCode", e.target.value)} placeholder="Code" style={{ flex: 1 }} />
+                  </div>
+                </div>
+              </div>
+              <div className="form-group">
+                <label>{t.clientAddress}</label>
+                <textarea rows="2" value={invoiceData.clientAddress} onChange={(e) => handleInputChange("clientAddress", e.target.value)} placeholder="Client Address..." />
+              </div>
+
+              <h3 style={{ fontSize: "0.95rem", marginBottom: "1rem", marginTop: "1.5rem" }}>{t.consigneeDetails}</h3>
+              <label style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "1rem", fontSize: "0.85rem", cursor: "pointer" }}>
+                <input type="checkbox" checked={invoiceData.consigneeSameAsClient} onChange={(e) => handleInputChange("consigneeSameAsClient", e.target.checked)} />
+                {t.sameAsClient}
+              </label>
+
+              {!invoiceData.consigneeSameAsClient && (
+                <>
+                  <div className="form-group-row">
+                    <div className="form-group">
+                      <label>{t.consigneeName}</label>
+                      <input type="text" value={invoiceData.consigneeName} onChange={(e) => handleInputChange("consigneeName", e.target.value)} placeholder="Consignee Name" />
+                    </div>
+                    <div className="form-group">
+                      <label>{t.consigneeGSTIN}</label>
+                      <input type="text" value={invoiceData.consigneeGSTIN} onChange={(e) => handleInputChange("consigneeGSTIN", e.target.value.toUpperCase())} placeholder="GSTIN" />
+                    </div>
+                  </div>
+                  <div className="form-group-row">
+                    <div className="form-group">
+                      <label>{t.consigneeState} & {t.consigneeStateCode}</label>
+                      <div style={{ display: "flex", gap: "0.5rem" }}>
+                        <input type="text" value={invoiceData.consigneeState} onChange={(e) => handleInputChange("consigneeState", e.target.value)} placeholder="State" style={{ flex: 2 }} />
+                        <input type="text" value={invoiceData.consigneeStateCode} onChange={(e) => handleInputChange("consigneeStateCode", e.target.value)} placeholder="Code" style={{ flex: 1 }} />
+                      </div>
+                    </div>
+                  </div>
+                  <div className="form-group">
+                    <label>{t.consigneeAddress}</label>
+                    <textarea rows="2" value={invoiceData.consigneeAddress} onChange={(e) => handleInputChange("consigneeAddress", e.target.value)} placeholder="Consignee Address..." />
+                  </div>
+                </>
+              )}
+            </div>
+
+            {/* Bank Details Form Card */}
+            <div style={{ backgroundColor: "var(--bg-canvas)", border: "1px solid var(--border)", borderRadius: "8px", padding: "1rem", marginTop: "1rem", borderTop: "4px solid #6b7280" }}>
+              <h3 style={{ fontSize: "0.95rem", marginBottom: "1rem" }}>{t.bankDetails}</h3>
+              <div className="form-group-row">
+                <div className="form-group">
+                  <label>{t.bankName}</label>
+                  <input type="text" value={invoiceData.bankName} onChange={(e) => handleInputChange("bankName", e.target.value)} placeholder="e.g. IDFC FIRST Bank" />
+                </div>
+                <div className="form-group">
+                  <label>{t.branchName}</label>
+                  <input type="text" value={invoiceData.branchName} onChange={(e) => handleInputChange("branchName", e.target.value)} placeholder="Branch Name" />
+                </div>
+              </div>
+              <div className="form-group-row">
+                <div className="form-group">
+                  <label>{t.accountName}</label>
+                  <input type="text" value={invoiceData.accountName} onChange={(e) => handleInputChange("accountName", e.target.value)} placeholder="Account Name" />
+                </div>
+              </div>
+              <div className="form-group-row">
+                <div className="form-group">
+                  <label>{t.accountNumber}</label>
+                  <input type="text" value={invoiceData.accountNumber} onChange={(e) => handleInputChange("accountNumber", e.target.value)} placeholder="Account Number" />
+                </div>
+                <div className="form-group">
+                  <label>{t.ifscCode}</label>
+                  <input type="text" value={invoiceData.ifscCode} onChange={(e) => handleInputChange("ifscCode", e.target.value.toUpperCase())} placeholder="IFSC Code" />
+                </div>
+              </div>
+            </div>
+
+            <div className="form-group" style={{ marginTop: "1rem" }}>
+              <label htmlFor="notes">{t.termsConditions}</label>
               <textarea 
                 id="notes" 
-                rows="3"
+                rows="4"
                 value={invoiceData.notes} 
                 onChange={(e) => handleInputChange("notes", e.target.value)}
-                placeholder="Include custom terms or bank instructions..."
+                placeholder="1. Goods once sold will not be taken back.&#10;2. Interest @ 18% p.a. will be charged if not paid within 7 days."
               />
             </div>
 
