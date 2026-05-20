@@ -8,9 +8,7 @@ export default function Dashboard({
   onStartGenerator, 
   onDeleteInvoice, 
   onPrintInvoice, 
-  isVaultEnabled, 
-  onLockVault, 
-  onDisableVault 
+  onShareInvoice 
 }) {
   const [searchTerm, setSearchTerm] = useState("");
   const t = translations[lang] || translations["en"];
@@ -120,31 +118,6 @@ export default function Dashboard({
             {maxCount > 0 ? `${maxCount} transaction(s)` : "No transactions recorded"}
           </div>
         </div>
-
-        <div className="stat-card" style={{ borderColor: isVaultEnabled ? "var(--success)" : "var(--border)" }}>
-          <div className="stat-label" style={{ color: isVaultEnabled ? "var(--success)" : "var(--text-muted)" }}>
-            {t.vaultMode}: {isVaultEnabled ? "🔐 Encrypted" : "🔓 Native"}
-          </div>
-          <div className="stat-value" style={{ fontSize: "1.1rem", fontWeight: "600", padding: "0.5rem 0" }}>
-            {isVaultEnabled ? t.activeSecurity : t.unencryptedWarning}
-          </div>
-          <div style={{ display: "flex", gap: "0.5rem", marginTop: "auto" }}>
-            {isVaultEnabled ? (
-              <>
-                <button className="btn btn-secondary" onClick={onLockVault} style={{ padding: "0.3rem 0.6rem", fontSize: "0.75rem" }}>
-                  {t.lockVault}
-                </button>
-                <button className="btn btn-danger" onClick={onDisableVault} style={{ padding: "0.3rem 0.6rem", fontSize: "0.75rem" }}>
-                  {t.decryptStorage}
-                </button>
-              </>
-            ) : (
-              <button className="btn btn-accent" onClick={onLockVault} style={{ padding: "0.4rem 0.8rem", fontSize: "0.75rem", width: "100%" }}>
-                {t.enablePasscode}
-              </button>
-            )}
-          </div>
-        </div>
       </div>
 
       {/* Main Billing Records Section */}
@@ -229,6 +202,14 @@ export default function Dashboard({
                           title="Print / Save PDF"
                         >
                           Print
+                        </button>
+                        <button 
+                          className="btn btn-primary" 
+                          onClick={() => onShareInvoice(inv)}
+                          style={{ padding: "0.3rem 0.6rem", fontSize: "0.75rem", background: "var(--primary)", color: "white" }}
+                          title="Share Invoice"
+                        >
+                          Share
                         </button>
                         <button 
                           className="btn btn-danger" 

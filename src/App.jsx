@@ -2,21 +2,20 @@ import React, { useState, useEffect } from "react";
 import Dashboard from "./components/Dashboard";
 import BillGenerator from "./components/BillGenerator";
 import InvoicePreview from "./components/InvoicePreview";
-import { encryptData, decryptData, getSystemMasterKey } from "./utils/encryption";
+import { encryptData, decryptData } from "./utils/encryption";
 import { languages } from "./utils/translations";
+import { loginWithGoogle, logout, onAuthStateChanged } from "./utils/firebase";
+import { captureInvoiceBlob, shareInvoice } from "./utils/imageExport";
 
 export default function App() {
   const [view, setView] = useState("dashboard"); // "dashboard", "generator"
   const [history, setHistory] = useState([]);
   
-  // Security & Vault states
-  const [isVaultEnabled, setIsVaultEnabled] = useState(false);
-  const [isUnlocked, setIsUnlocked] = useState(true);
-  const [passcodeInput, setPasscodeInput] = useState("");
-  const [activePassword, setActivePassword] = useState("");
-  const [vaultError, setVaultError] = useState("");
-  const [showPasscodeSetup, setShowPasscodeSetup] = useState(false);
-  const [setupPasscode, setSetupPasscode] = useState("");
+  
+  // Authentication states
+  const [user, setUser] = useState(null);
+  const [authLoading, setAuthLoading] = useState(true);
+  const [authError, setAuthError] = useState("");
   
   // Global Bilingual & Currency preferences
   const [lang, setLang] = useState(() => localStorage.getItem("_inv_lang") || "en");
@@ -25,27 +24,19 @@ export default function App() {
   // Temporary invoice state used for background printing layout
   const [activePrintInvoice, setActivePrintInvoice] = useState(null);
 
-  // Load encrypted database on mount, checking for Device-Bound single sign-in (Virtual MAC Auth)
+  // Listen to Firebase Auth state
   useEffect(() => {
-    const vaultFlag = localStorage.getItem("_vault_enabled_flag") === "true";
-    setIsVaultEnabled(vaultFlag);
-    
-    const deviceToken = localStorage.getItem("INVOSAFE_DEVICE_TOKEN");
-    
-    if (deviceToken) {
-      // Device already signed in and registered - seamless bypass activation!
-      setActivePassword(deviceToken);
-      setIsUnlocked(true);
-      loadDatabase(deviceToken);
-    } else if (vaultFlag) {
-      // Vault passcode is enabled but no active device token - require challenge passcode
-      setIsUnlocked(false);
-    } else {
-      // Standard transparent browser master key encryption
-      const sysKey = getSystemMasterKey();
-      setActivePassword(sysKey);
-      loadDatabase(sysKey);
-    }
+    const unsubscribe = onAuthStateChanged((currentUser) => {
+      setUser(currentUser);
+      if (currentUser) {
+        // Automatically load database using UID as encryption key
+        loadDatabase(currentUser.uid);
+      } else {
+        setHistory([]);
+      }
+      setAuthLoading(false);
+    });
+    return () => unsubscribe();
   }, []);
 
   // Sync preferences to localStorage
@@ -70,13 +61,10 @@ export default function App() {
       } else {
         setHistory([]);
       }
-      setVaultError("");
-      setIsUnlocked(true);
     } catch (err) {
       console.error("Failed to load invoice history database:", err);
-      setVaultError("Decryption failed. Incorrect passcode or corrupted storage.");
-      setIsUnlocked(false);
-      throw err;
+      // Failsafe empty DB if corrupted
+      setHistory([]);
     }
   };
 
@@ -92,123 +80,23 @@ export default function App() {
     }
   };
 
-  // Unlock vault using passcode challenge
-  const handleUnlockVault = async (e) => {
-    e.preventDefault();
-    if (!passcodeInput) return;
-    
+  // Login handler
+  const handleLogin = async () => {
     try {
-      setVaultError("");
-      
-      // Decrypt the INVOSAFE_SECURE_KEY_PACKAGE to obtain the actual database device key
-      const keyPackage = localStorage.getItem("INVOSAFE_SECURE_KEY_PACKAGE");
-      if (keyPackage) {
-        const deviceToken = await decryptData(keyPackage, passcodeInput);
-        // If decryption succeeded, the passcode is valid! Setup deviceToken as encryption activePassword.
-        localStorage.setItem("INVOSAFE_DEVICE_TOKEN", deviceToken); // Re-register device signature for seamless login
-        setActivePassword(deviceToken);
-        await loadDatabase(deviceToken);
-        setIsUnlocked(true);
-      } else {
-        // Vault enabled flag was set but package was lost: Fallback decrypting database directly
-        await loadDatabase(passcodeInput);
-        setActivePassword(passcodeInput);
-        setIsUnlocked(true);
-      }
-      setPasscodeInput("");
+      setAuthError("");
+      await loginWithGoogle();
     } catch (err) {
-      setVaultError("Decryption failed: Incorrect passcode.");
-      setIsUnlocked(false);
+      setAuthError("Failed to sign in with Google. Ensure Firebase is configured correctly.");
     }
   };
 
-  // Turn on passcode / vault mode
-  const handleEnableVault = async (e) => {
-    e.preventDefault();
-    if (!setupPasscode || setupPasscode.length < 4) {
-      alert("Passcode must be at least 4 characters long.");
-      return;
-    }
-
+  // Logout handler
+  const handleLogout = async () => {
     try {
-      // 1. Generate Virtual MAC signature token for transparent login
-      const deviceToken = "VMAC-" + window.btoa(
-        Array.from(window.crypto.getRandomValues(new Uint8Array(24)))
-          .map(b => String.fromCharCode(b))
-          .join("")
-      ).replace(/[^a-zA-Z0-9]/g, "");
-
-      // 2. Encrypt the device token with the user's custom passcode and save package
-      const encryptedKeyPackage = await encryptData(deviceToken, setupPasscode);
-      localStorage.setItem("INVOSAFE_SECURE_KEY_PACKAGE", encryptedKeyPackage);
-      localStorage.setItem("INVOSAFE_DEVICE_TOKEN", deviceToken);
-      localStorage.setItem("_vault_enabled_flag", "true");
-
-      // 3. Save active database history with the deviceToken
-      await saveDatabase(history, deviceToken);
-
-      setIsVaultEnabled(true);
-      setActivePassword(deviceToken);
-      setShowPasscodeSetup(false);
-      setSetupPasscode("");
-      setIsUnlocked(true);
-      alert("Virtual MAC Authentication active! Seamless sign-in enabled for this device.");
+      await logout();
+      setView("dashboard");
     } catch (err) {
       console.error(err);
-      alert("Error enabling Vault Mode passcode encryption.");
-    }
-  };
-
-  // Completely unregister device (Sign Out & Wipe Keys)
-  const handleUnregisterDevice = () => {
-    if (!window.confirm("Are you sure you want to sign out and unregister this device? This will wipe your active session credentials, requiring your passcode on next sign-in. Your invoice database will remain securely encrypted.")) return;
-    
-    // Wipe local session keys and credentials
-    localStorage.removeItem("INVOSAFE_DEVICE_TOKEN");
-    setIsUnlocked(false);
-    setActivePassword("");
-    setPasscodeInput("");
-    setHistory([]);
-  };
-
-  // Revert back to transparent browser default encryption
-  const handleDisableVault = async () => {
-    if (!window.confirm("Decrypt and revert to standard transparent browser storage? Your database will remain encrypted in local storage, but won't require a manual passcode or registration on launch.")) return;
-
-    try {
-      const sysKey = getSystemMasterKey();
-      
-      // Decrypt database using active device token
-      const currentHistory = [...history];
-      
-      // Re-save database using the standard browser-unique key
-      await saveDatabase(currentHistory, sysKey);
-      
-      // Wipe vault variables
-      localStorage.setItem("_vault_enabled_flag", "false");
-      localStorage.removeItem("INVOSAFE_DEVICE_TOKEN");
-      localStorage.removeItem("INVOSAFE_SECURE_KEY_PACKAGE");
-      
-      setIsVaultEnabled(false);
-      setActivePassword(sysKey);
-      setIsUnlocked(true);
-      setHistory(currentHistory);
-    } catch (err) {
-      alert("Error disabling Vault passcode protection.");
-    }
-  };
-
-  // Lock session manually
-  const handleLockVaultManually = () => {
-    if (isVaultEnabled) {
-      // Remove device token to lock the workspace
-      localStorage.removeItem("INVOSAFE_DEVICE_TOKEN");
-      setIsUnlocked(false);
-      setActivePassword("");
-      setPasscodeInput("");
-      setHistory([]);
-    } else {
-      setShowPasscodeSetup(true);
     }
   };
 
@@ -221,7 +109,7 @@ export default function App() {
     
     const updatedHistory = [invoiceRecord, ...history];
     setHistory(updatedHistory);
-    await saveDatabase(updatedHistory, activePassword);
+    if (user) await saveDatabase(updatedHistory, user.uid);
     setView("dashboard");
   };
 
@@ -231,7 +119,7 @@ export default function App() {
     
     const updatedHistory = history.filter(inv => inv.id !== invoiceId);
     setHistory(updatedHistory);
-    await saveDatabase(updatedHistory, activePassword);
+    if (user) await saveDatabase(updatedHistory, user.uid);
   };
 
   // Sibling trigger to print a past invoice
@@ -242,14 +130,46 @@ export default function App() {
     }, 250);
   };
 
-  // Lock session (bypasses unregistering device)
-  const handleSessionLock = () => {
-    localStorage.removeItem("INVOSAFE_DEVICE_TOKEN"); // Remove token so it must be unlocked
-    setIsUnlocked(false);
-    setActivePassword("");
-    setPasscodeInput("");
-    setHistory([]);
+  // Sibling trigger to share a past invoice
+  const handleSharePastInvoice = async (invoice) => {
+    // Briefly render the invoice in the background print container
+    setActivePrintInvoice(invoice);
+    
+    // Give DOM time to mount
+    setTimeout(async () => {
+      try {
+        const blob = await captureInvoiceBlob("printable-invoice");
+        const result = await shareInvoice(invoice, blob);
+        
+        if (result.success && result.method === "fallback") {
+          const wnd = window.open("", "_blank");
+          if (wnd) {
+            wnd.document.write(`
+              <div style="font-family:sans-serif; padding: 2rem; max-width: 600px; margin: 0 auto; text-align: center;">
+                <h2>Share Invoice ${invoice.invoiceNumber}</h2>
+                <p>Native file sharing is not supported on this browser. Share using the links below:</p>
+                <div style="display: flex; gap: 1rem; justify-content: center; margin-top: 2rem;">
+                  <a href="${result.urls.whatsapp}" target="_blank" style="padding: 10px 20px; background: #25D366; color: white; text-decoration: none; border-radius: 5px;">WhatsApp</a>
+                  <a href="${result.urls.email}" target="_blank" style="padding: 10px 20px; background: #333; color: white; text-decoration: none; border-radius: 5px;">Email</a>
+                </div>
+              </div>
+            `);
+          }
+        }
+      } catch (e) {
+        console.error("Sharing failed", e);
+        alert("Failed to generate or share the invoice.");
+      } finally {
+        // Clear it back
+        setActivePrintInvoice(null);
+      }
+    }, 500);
   };
+
+  // Render while checking auth
+  if (authLoading) {
+    return <div style={{ display: "flex", justifyContent: "center", alignItems: "center", height: "100vh", color: "white" }}>Loading Secure Session...</div>;
+  }
 
   return (
     <>
@@ -266,11 +186,9 @@ export default function App() {
       <div className="app-container">
         {/* Main Screen App Shell */}
         <header className="app-header">
-          <div className="brand-section">
-            <div className="brand-icon">🧾</div>
+          <div className="brand-section" onClick={() => setView("dashboard")} style={{ cursor: "pointer" }}>
             <div className="brand-title">
-              <h1>InvoSafe / invorator</h1>
-              <p>High-End Client-Side Invoice Vault</p>
+              <h1 className="premium-logo">invorator.</h1>
             </div>
           </div>
           
@@ -299,97 +217,50 @@ export default function App() {
               </select>
             </div>
 
-            {isUnlocked && (
+            {user && (
               <>
-                {localStorage.getItem("INVOSAFE_DEVICE_TOKEN") ? (
-                  <span className="badge-vmac" title="Seamless Virtual MAC Bypass Active">
-                    🖥️ Device Auth Active
-                  </span>
-                ) : (
-                  <span className="badge-standard">
-                    🛡️ Client Secured
-                  </span>
-                )}
-                {isVaultEnabled && (
-                  <button className="btn btn-secondary btn-sm" onClick={handleSessionLock}>
-                    🔒 Lock
-                  </button>
-                )}
-                {localStorage.getItem("INVOSAFE_DEVICE_TOKEN") && (
-                  <button className="btn btn-danger btn-sm" onClick={handleUnregisterDevice}>
-                    🚪 Sign Out
-                  </button>
-                )}
+                <span className="badge-standard" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <img src={user.photoURL} alt="Profile" style={{ width: '20px', height: '20px', borderRadius: '50%' }} />
+                  {user.displayName}
+                </span>
+                
                 {view !== "dashboard" && (
                   <button className="btn btn-secondary" onClick={() => setView("dashboard")}>
-                    Dashboard
+                    ← Back to Dashboard
                   </button>
                 )}
+                
+                <button className="btn btn-danger btn-sm" onClick={handleLogout}>
+                  Sign Out
+                </button>
               </>
             )}
           </div>
         </header>
 
-        {/* Vault Passcode Setup Modal Overlay */}
-        {showPasscodeSetup && (
+        {/* Firebase Google Auth Login Screen */}
+        {!user && (
           <div className="vault-lock-screen">
-            <div className="vault-lock-icon">🔐</div>
-            <h2>Create Vault Passcode</h2>
-            <p style={{ color: "var(--text-muted)", fontSize: "0.85rem" }}>
-              Protect your expensed invoices with high-entropy client AES encryption. Your passcode is never stored or sent over a network.
+            <h1 className="premium-logo" style={{ fontSize: "3.5rem", marginBottom: "0.5rem", color: "white" }}>invorator.</h1>
+            <p style={{ color: "var(--text-muted)", fontSize: "1rem", marginBottom: "2rem" }}>
+              Secure Client-Side Invoice Platform
             </p>
-            <form onSubmit={handleEnableVault} style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
-              <input 
-                type="password"
-                placeholder="Enter master passcode (min 4 chars)"
-                value={setupPasscode}
-                onChange={(e) => setSetupPasscode(e.target.value)}
-                required
-                autoFocus
-              />
-              <div style={{ display: "flex", gap: "0.5rem" }}>
-                <button type="button" className="btn btn-secondary" style={{ flex: 1 }} onClick={() => setShowPasscodeSetup(false)}>
-                  Cancel
-                </button>
-                <button type="submit" className="btn btn-primary" style={{ flex: 1.5 }}>
-                  Secure Database
-                </button>
-              </div>
-            </form>
-          </div>
-        )}
-
-        {/* Vault Challenge Lock Screen */}
-        {!isUnlocked && !showPasscodeSetup && (
-          <div className="vault-lock-screen">
-            <div className="vault-lock-icon">🔒</div>
-            <h2>InvoSafe Vault Locked</h2>
-            <p style={{ color: "var(--text-muted)", fontSize: "0.85rem" }}>
-              Enter your custom cryptographic passcode to decrypt and access local invoice records.
-            </p>
-            <form onSubmit={handleUnlockVault} style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
-              <input 
-                type="password"
-                placeholder="Enter cryptographic passcode"
-                value={passcodeInput}
-                onChange={(e) => setPasscodeInput(e.target.value)}
-                required
-                autoFocus
-              />
-              {vaultError && (
-                <p style={{ color: "var(--error)", fontSize: "0.8rem", fontWeight: "600" }}>
-                  {vaultError}
-                </p>
-              )}
-              <button type="submit" className="btn btn-primary" style={{ width: "100%" }}>
-                Unlock Database
-              </button>
-            </form>
+            <button className="btn btn-primary" onClick={handleLogin} style={{ padding: "1rem 2rem", fontSize: "1.1rem", display: "flex", gap: "0.5rem", alignItems: "center" }}>
+              <svg viewBox="0 0 24 24" width="24" height="24" xmlns="http://www.w3.org/2000/svg">
+                <path fill="#ffffff" d="M12.545,10.239v3.821h5.445c-0.712,2.315-2.647,3.972-5.445,3.972c-3.332,0-6.033-2.701-6.033-6.032s2.701-6.032,6.033-6.032c1.498,0,2.866,0.549,3.921,1.453l2.814-2.814C17.503,2.988,15.139,2,12.545,2C7.021,2,2.543,6.477,2.543,12s4.478,10,10.002,10c8.396,0,10.249-7.85,9.426-11.748L12.545,10.239z"/>
+              </svg>
+              Continue with Google
+            </button>
+            {authError && (
+              <p style={{ color: "var(--error)", fontSize: "0.9rem", marginTop: "1rem" }}>
+                {authError}
+              </p>
+            )}
           </div>
         )}
 
         {/* Core Views Routing Dashboard & Editor */}
-        {isUnlocked && !showPasscodeSetup && (
+        {user && (
           <main style={{ minHeight: "70vh" }}>
             {view === "dashboard" ? (
               <Dashboard 
@@ -399,9 +270,7 @@ export default function App() {
                 onStartGenerator={() => setView("generator")}
                 onDeleteInvoice={handleDeleteInvoice}
                 onPrintInvoice={handlePrintPastInvoice}
-                isVaultEnabled={isVaultEnabled}
-                onLockVault={handleLockVaultManually}
-                onDisableVault={handleDisableVault}
+                onShareInvoice={handleSharePastInvoice}
               />
             ) : (
               <BillGenerator 
