@@ -592,6 +592,10 @@ export default function BillGenerator({ onSaveInvoice, onCancel, lang = "en", cu
                   <input type="text" value={invoiceData.vendorPAN} onChange={(e) => handleInputChange("vendorPAN", e.target.value.toUpperCase())} placeholder="ABCDE1234F" />
                 </div>
                 <div className="form-group">
+                  <label>Vendor GSTIN</label>
+                  <input type="text" value={invoiceData.gstinSupplier} onChange={(e) => handleInputChange("gstinSupplier", e.target.value.toUpperCase())} placeholder="e.g. 27AAPCG2910R1Z2" />
+                </div>
+                <div className="form-group">
                   <label>{t.vendorStateCode}</label>
                   <input type="text" value={invoiceData.vendorStateCode} onChange={(e) => handleInputChange("vendorStateCode", e.target.value)} placeholder="e.g. 27" />
                 </div>
@@ -620,6 +624,12 @@ export default function BillGenerator({ onSaveInvoice, onCancel, lang = "en", cu
                   <label>Client Name</label>
                   <input type="text" value={invoiceData.clientName} onChange={(e) => handleInputChange("clientName", e.target.value)} placeholder="Client Company" />
                 </div>
+                <div className="form-group">
+                  <label>Client GSTIN</label>
+                  <input type="text" value={invoiceData.gstinBuyer} onChange={(e) => handleInputChange("gstinBuyer", e.target.value.toUpperCase())} placeholder="e.g. 27AADCB0910A1Z5" />
+                </div>
+              </div>
+              <div className="form-group-row">
                 <div className="form-group">
                   <label>{t.clientState} & {t.clientStateCode}</label>
                   <div style={{ display: "flex", gap: "0.5rem" }}>
