@@ -215,10 +215,10 @@ export default function Dashboard({
                         <button 
                           className="btn btn-secondary" 
                           onClick={() => onCopyInvoice(inv)}
-                          style={{ padding: "0.3rem 0.6rem", fontSize: "0.75rem", background: "#f59e0b", color: "white", border: "none" }}
-                          title="Copy Record"
+                          style={{ padding: "0.3rem 0.6rem", fontSize: "0.75rem", background: "#3b82f6", color: "white", border: "none" }}
+                          title="Edit / Create Copy"
                         >
-                          Copy
+                          Create Copy
                         </button>
                         <button 
                           className="btn btn-danger" 
