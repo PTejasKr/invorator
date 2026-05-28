@@ -13,6 +13,9 @@ export default function App() {
   const [selectedDesign, setSelectedDesign] = useState(1);
   const [initialInvoiceData, setInitialInvoiceData] = useState(null);
   
+  // Edit Mode: tracks whether we're editing an existing invoice
+  const [editingInvoiceId, setEditingInvoiceId] = useState(null);
+  
   // Global Bilingual & Currency preferences
   const [lang, setLang] = useState(() => localStorage.getItem("_inv_lang") || "en");
   const [currency, setCurrency] = useState(() => localStorage.getItem("_inv_currency") || "USD");
@@ -67,17 +70,34 @@ export default function App() {
     }
   };
 
-  // Add new generated invoice to secure database
+  // Add new or update existing invoice in secure database
   const handleSaveInvoice = async (newInvoice) => {
     const sysKey = getSystemMasterKey();
-    const invoiceRecord = {
-      ...newInvoice,
-      id: Date.now() + Math.floor(Math.random() * 1000)
-    };
     
-    const updatedHistory = [invoiceRecord, ...history];
+    let updatedHistory;
+    
+    if (editingInvoiceId) {
+      // EDIT MODE: mutate the existing entry, don't create a duplicate
+      updatedHistory = history.map(inv => 
+        inv.id === editingInvoiceId
+          ? { ...newInvoice, id: editingInvoiceId }
+          : inv
+      );
+    } else {
+      // CREATE MODE: append a brand new record
+      const invoiceRecord = {
+        ...newInvoice,
+        id: Date.now() + Math.floor(Math.random() * 1000)
+      };
+      updatedHistory = [invoiceRecord, ...history];
+    }
+    
     setHistory(updatedHistory);
     await saveDatabase(updatedHistory, sysKey);
+    
+    // Reset edit state and navigate back
+    setEditingInvoiceId(null);
+    setInitialInvoiceData(null);
     setView("dashboard");
   };
 
@@ -135,6 +155,13 @@ export default function App() {
     }, 500);
   };
 
+  // Navigate back to dashboard and clear edit state
+  const handleBackToDashboard = () => {
+    setEditingInvoiceId(null);
+    setInitialInvoiceData(null);
+    setView("dashboard");
+  };
+
   return (
     <>
       {activePrintInvoice && (
@@ -146,7 +173,7 @@ export default function App() {
       <div className="app-container">
         {/* Main Screen App Shell */}
         <header className="app-header">
-          <div className="brand-section" onClick={() => setView("dashboard")} style={{ cursor: "pointer" }}>
+          <div className="brand-section" onClick={handleBackToDashboard} style={{ cursor: "pointer" }}>
             <div className="brand-title">
               <h1 className="premium-logo" style={{ fontFamily: "'Great Vibes', cursive", fontSize: "3.5rem", textTransform: "uppercase", letterSpacing: "2px", fontWeight: "400" }}>INVORATOR</h1>
             </div>
@@ -172,7 +199,7 @@ export default function App() {
               </div>
 
               {view !== "dashboard" && (
-                <button className="btn btn-secondary" onClick={() => setView("dashboard")}>
+                <button className="btn btn-secondary" onClick={handleBackToDashboard}>
                   ← Back to Dashboard
                 </button>
               )}
@@ -188,12 +215,20 @@ export default function App() {
               lang={lang}
               currency={currency}
               onStartGenerator={() => {
+                setEditingInvoiceId(null);
                 setInitialInvoiceData(null);
                 setView("designSelector");
               }}
-              onCopyInvoice={(inv) => {
+              onEditInvoice={(inv) => {
+                // EDIT MODE: load the full invoice and track its ID
+                setEditingInvoiceId(inv.id);
                 setInitialInvoiceData(inv);
-                // Can optionally go to design selector or straight to generator. Let's go to design selector so they can pick a design for the copy too.
+                setView("designSelector");
+              }}
+              onCopyInvoice={(inv) => {
+                // COPY MODE: load data but with no editing ID (creates new)
+                setEditingInvoiceId(null);
+                setInitialInvoiceData(inv);
                 setView("designSelector");
               }}
               onDeleteInvoice={handleDeleteInvoice}
@@ -208,7 +243,7 @@ export default function App() {
                 setSelectedDesign(designId);
                 setView("generator");
               }}
-              onCancel={() => setView("dashboard")}
+              onCancel={handleBackToDashboard}
             />
           )}
           {view === "generator" && (
@@ -217,8 +252,9 @@ export default function App() {
               currency={currency}
               initialData={initialInvoiceData}
               selectedDesign={selectedDesign}
+              isEditMode={!!editingInvoiceId}
               onSaveInvoice={handleSaveInvoice}
-              onCancel={() => setView("dashboard")}
+              onCancel={handleBackToDashboard}
             />
           )}
           </main>

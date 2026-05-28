@@ -459,13 +459,15 @@ tr:hover td {
 
 /* Step 2: Split Panel Builder */
 .builder-split-view {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: 1.1fr 0.9fr;
   gap: 2rem;
+  align-items: start;
 }
 
 @media (max-width: 1024px) {
   .builder-split-view {
+    display: flex;
     flex-direction: column;
   }
 }
@@ -572,13 +574,13 @@ input:focus, select:focus, textarea:focus {
 
 /* Real-Time Live Preview Frame */
 .preview-pane-sticky {
-  position: relative;
+  position: sticky;
+  top: 2rem;
   background: white;
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-lg);
   overflow: hidden;
-  margin-top: 2rem;
 }
 
 .preview-pane-header {
@@ -916,7 +918,8 @@ input:focus, select:focus, textarea:focus {
    ========================================== */
 @media (max-width: 1024px) {
   .builder-split-view {
-    grid-template-columns: 1fr !important;
+    display: flex !important;
+    flex-direction: column !important;
     gap: 2rem;
   }
   
@@ -970,14 +973,47 @@ input:focus, select:focus, textarea:focus {
     gap: 1rem !important;
   }
 
-  /* Make items editor table scrollable horizontally to prevent overflowing page boundaries */
-  .items-editor {
-    overflow-x: auto !important;
-    -webkit-overflow-scrolling: touch;
+  /* Mobile card-based line items — eliminates horizontal scroll */
+  .items-editor-header {
+    display: none !important;
   }
 
-  .items-editor-header, .item-row {
-    min-width: 580px; /* Establishes readable layout grid even when scrolling */
+  .items-editor {
+    border: none !important;
+    background: transparent !important;
+    overflow: visible !important;
+  }
+
+  .item-row {
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 0.5rem !important;
+    padding: 1rem !important;
+    border: 1px solid var(--border) !important;
+    border-radius: var(--radius-md) !important;
+    margin-bottom: 0.75rem !important;
+    background: white !important;
+    box-shadow: var(--shadow-sm) !important;
+    min-width: unset !important;
+  }
+
+  .item-row input {
+    width: 100% !important;
+    min-height: 44px !important;
+    font-size: 0.9rem !important;
+    padding: 0.5rem 0.75rem !important;
+  }
+
+  .item-row .item-total {
+    padding: 0.5rem 0.75rem !important;
+    text-align: left !important;
+    font-size: 1rem !important;
+  }
+
+  .item-row .btn-remove {
+    min-height: 44px !important;
+    min-width: 44px !important;
+    align-self: flex-end !important;
   }
 
   /* Stack billing details columns */
@@ -996,8 +1032,22 @@ input:focus, select:focus, textarea:focus {
   }
 
   .invoice-preview-wrapper {
-    /* Maintain scaled padding visually consistent */
     padding: 2rem !important;
+  }
+
+  /* Full-width scanner on mobile */
+  .scanning-card {
+    max-width: 100% !important;
+    margin: 1rem auto !important;
+  }
+
+  .uploader-box {
+    padding: 2.5rem 1rem !important;
+  }
+
+  /* Touch targets: minimum 44x44px */
+  .btn {
+    min-height: 44px !important;
   }
 }
 
@@ -1042,4 +1092,10 @@ input:focus, select:focus, textarea:focus {
   .scanning-image-wrapper {
     height: 180px !important;
   }
+}
+
+/* OCR Toast fade-in animation */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(-10px); }
+  to { opacity: 1; transform: translateY(0); }
 }

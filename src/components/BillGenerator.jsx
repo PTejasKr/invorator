@@ -6,72 +6,102 @@ import { translations } from "../utils/translations";
 import { downloadInvoiceImage, shareInvoice } from "../utils/imageExport";
 import InvoicePreviewDesign2 from "./InvoicePreviewDesign2";
 import InvoicePreviewDesign3 from "./InvoicePreviewDesign3";
+import { saveVendorProfile, loadVendorProfile } from "../utils/storageController";
 import * as pdfjsLib from "pdfjs-dist";
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
 
-export default function BillGenerator({ onSaveInvoice, onCancel, lang = "en", currency = "USD", initialData = null, selectedDesign = 1 }) {
-  const [step, setStep] = useState(1); // 1 = Upload/Choose, 2 = Builder
+export default function BillGenerator({ onSaveInvoice, onCancel, lang = "en", currency = "USD", initialData = null, selectedDesign = 1, isEditMode = false }) {
+  const [step, setStep] = useState(isEditMode ? 2 : 1); // Edit mode skips step 1
   const [imagePreview, setImagePreview] = useState(null);
   const [isScanning, setIsScanning] = useState(false);
   const [scanProgress, setScanProgress] = useState(0);
   const [scanStatus, setScanStatus] = useState("");
   
+  // OCR toast notification state
+  const [ocrToast, setOcrToast] = useState(null);
+  
   const t = translations[lang] || translations["en"];
   const symbol = currency === "INR" ? "₹" : "$";
 
-  // Invoice form state with GST additions
+  // ─────────────────────────────────────────────────────────────
+  // Invoice form state — Privacy-first initialization:
+  //   1. Edit/Copy mode: hydrate from initialData
+  //   2. New invoice: load vendor profile (whitelisted fields only)
+  //      Client fields and line items are always blank.
+  // ─────────────────────────────────────────────────────────────
   const [invoiceData, setInvoiceData] = useState(() => {
-    if (initialData) return { ...initialData, id: undefined };
-    
-    const savedDraft = localStorage.getItem("invorator_draft");
-    if (savedDraft) {
-      try {
-        return JSON.parse(savedDraft);
-      } catch(e) {}
+    if (initialData) {
+      // Edit mode or Copy mode — hydrate the full invoice
+      return { ...initialData, id: undefined };
     }
     
+    // New invoice: load only whitelisted vendor profile
+    const vendorProfile = loadVendorProfile();
+    
     return {
-    vendorName: "",
-    vendorAddress: "",
-    vendorPhone: "",
-    vendorEmail: "",
-    vendorPAN: "",
-    vendorStateCode: "",
-    clientName: "",
-    clientAddress: "",
-    clientState: "",
-    clientStateCode: "",
-    consigneeSameAsClient: false,
-    consigneeName: "",
-    consigneeAddress: "",
-    consigneeGSTIN: "",
-    consigneeState: "",
-    consigneeStateCode: "",
-    invoiceNumber: "",
-    date: "",
-    reverseCharge: "No",
-    items: [],
-    taxRate: 18, // GST Indian standard is typically 18%
-    taxAmount: 0,
-    subtotal: 0,
-    total: 0,
-    notes: "",
-    gstRegime: "standard", // "standard", "intrastate", "interstate"
-    gstinSupplier: "",
-    gstinBuyer: "",
-    bankName: "",
-    accountName: "",
-    accountNumber: "",
-    ifscCode: "",
-    branchName: ""
+      vendorName: "",
+      vendorAddress: "",
+      vendorPhone: "",
+      vendorEmail: "",
+      vendorPAN: "",
+      vendorStateCode: "",
+      // Client fields: ALWAYS blank on new invoice (BLACKLISTED)
+      clientName: "",
+      clientAddress: "",
+      clientState: "",
+      clientStateCode: "",
+      consigneeSameAsClient: false,
+      consigneeName: "",
+      consigneeAddress: "",
+      consigneeGSTIN: "",
+      consigneeState: "",
+      consigneeStateCode: "",
+      // Per-invoice fields: ALWAYS fresh
+      invoiceNumber: "INV-" + Math.floor(100000 + Math.random() * 900000),
+      date: new Date().toISOString().split("T")[0],
+      reverseCharge: "No",
+      items: [],
+      taxRate: 18,
+      taxAmount: 0,
+      subtotal: 0,
+      total: 0,
+      notes: "",
+      gstRegime: "standard",
+      gstinSupplier: "",
+      gstinBuyer: "",
+      bankName: "",
+      accountName: "",
+      accountNumber: "",
+      ifscCode: "",
+      branchName: "",
+      // Spread the vendor profile on top — overwrites vendor fields only
+      ...vendorProfile
     };
   });
 
-  // Auto-save draft on every change
+  // ─────────────────────────────────────────────────────────────
+  // Auto-save vendor profile on vendor field changes.
+  // This ONLY persists whitelisted keys — client data is excluded
+  // by the storageController's extraction logic.
+  // ─────────────────────────────────────────────────────────────
+  const vendorDepsRef = useRef(null);
   useEffect(() => {
-    if (invoiceData) {
-      localStorage.setItem("invorator_draft", JSON.stringify(invoiceData));
+    // Debounce: only save when vendor fields actually change
+    const vendorSnapshot = JSON.stringify([
+      invoiceData.vendorName, invoiceData.vendorAddress, 
+      invoiceData.vendorPhone, invoiceData.vendorEmail,
+      invoiceData.vendorPAN, invoiceData.vendorStateCode,
+      invoiceData.gstinSupplier, invoiceData.gstRegime,
+      invoiceData.taxRate, invoiceData.reverseCharge,
+      invoiceData.bankName, invoiceData.accountName,
+      invoiceData.accountNumber, invoiceData.ifscCode,
+      invoiceData.branchName, invoiceData.notes
+    ]);
+    
+    if (vendorDepsRef.current !== vendorSnapshot) {
+      vendorDepsRef.current = vendorSnapshot;
+      saveVendorProfile(invoiceData);
     }
   }, [invoiceData]);
 
@@ -91,7 +121,26 @@ export default function BillGenerator({ onSaveInvoice, onCancel, lang = "en", cu
     }));
   }, [invoiceData.items, invoiceData.taxRate]);
 
-  // Handle OCR Tesseract scanning or PDF Parsing
+  // Auto-dismiss OCR toast after 6 seconds
+  useEffect(() => {
+    if (ocrToast) {
+      const timer = setTimeout(() => setOcrToast(null), 6000);
+      return () => clearTimeout(timer);
+    }
+  }, [ocrToast]);
+
+  // ─────────────────────────────────────────────────────────────
+  // OCR / PDF Processing Pipeline
+  // ─────────────────────────────────────────────────────────────
+  const showOcrToast = (parsed) => {
+    const meta = parsed.meta || { itemCount: parsed.items?.length || 0, confidence: "medium", warnings: [] };
+    setOcrToast({
+      itemCount: meta.itemCount,
+      confidence: meta.confidence,
+      warnings: meta.warnings
+    });
+  };
+
   const processFile = async (file) => {
     if (!file) return;
 
@@ -110,6 +159,7 @@ export default function BillGenerator({ onSaveInvoice, onCancel, lang = "en", cu
           const textContent = await page.getTextContent();
           const pageText = textContent.items.map(item => item.str).join(" ");
           fullText += pageText + "\n";
+          setScanProgress(Math.round((i / pdf.numPages) * 100));
         }
         
         setIsScanning(false);
@@ -118,6 +168,7 @@ export default function BillGenerator({ onSaveInvoice, onCancel, lang = "en", cu
         setInvoiceData(prev => ({
           ...prev,
           ...parsed,
+          meta: undefined, // Don't store meta in invoice data
           gstRegime: "standard",
           taxRate: parsed.taxRate || 18,
           items: parsed.items?.map(item => ({
@@ -127,6 +178,7 @@ export default function BillGenerator({ onSaveInvoice, onCancel, lang = "en", cu
             unit: "PCS"
           })) || []
         }));
+        showOcrToast(parsed);
         setStep(2);
       } catch (err) {
         console.error("PDF Parsing failed", err);
@@ -159,10 +211,10 @@ export default function BillGenerator({ onSaveInvoice, onCancel, lang = "en", cu
             setIsScanning(false);
             setScanStatus("Completed successfully!");
             const parsed = parseOCRText(text);
-            // Set initial items and calculated subtotal
             setInvoiceData(prev => ({
               ...prev,
               ...parsed,
+              meta: undefined,
               gstRegime: "standard",
               taxRate: parsed.taxRate || 18,
               items: parsed.items?.map(item => ({
@@ -172,6 +224,7 @@ export default function BillGenerator({ onSaveInvoice, onCancel, lang = "en", cu
                 unit: "PCS"
               })) || []
             }));
+            showOcrToast(parsed);
             setStep(2);
           })
           .catch((error) => {
@@ -216,43 +269,22 @@ export default function BillGenerator({ onSaveInvoice, onCancel, lang = "en", cu
 
   // Manual fallback initialization
   const handleManualStart = () => {
-    setInvoiceData({
-      vendorName: "Merchant Enterprise",
-      vendorAddress: "123 Business Rd\nCity, State 12345",
-      vendorPhone: "+91 9876543210",
-      vendorEmail: "billing@merchant.com",
-      vendorPAN: "ABCDE1234F",
-      vendorStateCode: "27",
-      clientName: "Acme Corp",
-      clientAddress: "456 Client St\nCity, State 67890",
-      clientState: "Maharashtra",
-      clientStateCode: "27",
-      consigneeSameAsClient: true,
-      consigneeName: "",
-      consigneeAddress: "",
-      consigneeGSTIN: "",
-      consigneeState: "",
-      consigneeStateCode: "",
-      invoiceNumber: "INV-" + Math.floor(100000 + Math.random() * 900000),
-      date: new Date().toISOString().split("T")[0],
-      reverseCharge: "No",
-      items: [
-        { id: Date.now(), description: "Standard Professional Consulting", quantity: 1, rate: 1000, hsnCode: "998311", unit: "PCS", total: 1000 }
-      ],
-      taxRate: 18,
-      taxAmount: 180,
-      subtotal: 1000,
-      total: 1180,
-      notes: "1. Payment due within 30 days.\n2. Subject to local jurisdiction.",
-      gstRegime: "intrastate",
-      gstinSupplier: "27AAPCG2910R1Z2",
-      gstinBuyer: "27AADCB0910A1Z5",
-      bankName: "HDFC Bank",
-      accountName: "Merchant Enterprise",
-      accountNumber: "12345678901234",
-      ifscCode: "HDFC0001234",
-      branchName: "Main Branch"
-    });
+    // Load vendor profile for auto-fill, keep client fields blank
+    const vendorProfile = loadVendorProfile();
+    setInvoiceData(prev => ({
+      ...prev,
+      ...vendorProfile,
+      // Ensure client fields stay blank
+      clientName: prev.clientName || "",
+      clientAddress: prev.clientAddress || "",
+      clientState: prev.clientState || "",
+      clientStateCode: prev.clientStateCode || "",
+      invoiceNumber: prev.invoiceNumber || ("INV-" + Math.floor(100000 + Math.random() * 900000)),
+      date: prev.date || new Date().toISOString().split("T")[0],
+      items: prev.items.length > 0 ? prev.items : [
+        { id: Date.now(), description: "Professional Services", quantity: 1, rate: 0, hsnCode: "", unit: "PCS", total: 0 }
+      ]
+    }));
     setStep(2);
   };
 
@@ -312,7 +344,6 @@ export default function BillGenerator({ onSaveInvoice, onCancel, lang = "en", cu
       return;
     }
     
-    localStorage.removeItem("invorator_draft");
     onSaveInvoice({
       ...invoiceData,
       currency: currency
@@ -325,7 +356,6 @@ export default function BillGenerator({ onSaveInvoice, onCancel, lang = "en", cu
       const canvasElement = document.getElementById("printable-invoice");
       if (!canvasElement) return;
       
-      // Grab direct transparent blob for Web Share API
       const canvas = await import("html2canvas").then(h => h.default(canvasElement, { 
         scale: 2, 
         backgroundColor: "#ffffff",
@@ -355,11 +385,9 @@ export default function BillGenerator({ onSaveInvoice, onCancel, lang = "en", cu
       return;
     }
     
-    localStorage.removeItem("invorator_draft");
-    // Save generated invoice to history vault
     onSaveInvoice({
       ...invoiceData,
-      currency: currency // Keep preference tied in history records
+      currency: currency
     });
     
     // Trigger printable sibling frame
@@ -367,6 +395,10 @@ export default function BillGenerator({ onSaveInvoice, onCancel, lang = "en", cu
       window.print();
     }, 250);
   };
+
+  // Dynamic button labels based on edit mode
+  const saveLabel = isEditMode ? "💾 Update Invoice" : "💾 Save Invoice";
+  const printLabel = isEditMode ? "Update & Print" : t.btnSavePrint;
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "1.5rem" }}>
@@ -382,6 +414,58 @@ export default function BillGenerator({ onSaveInvoice, onCancel, lang = "en", cu
           <span>{t.step2Title}</span>
         </div>
       </div>
+
+      {/* OCR Toast Notification */}
+      {ocrToast && (
+        <div 
+          className="ocr-toast"
+          onClick={() => setOcrToast(null)}
+          style={{
+            padding: "1rem 1.5rem",
+            backgroundColor: "#f0fdf4",
+            border: "1px solid #bbf7d0",
+            borderRadius: "var(--radius-md)",
+            display: "flex",
+            alignItems: "center",
+            gap: "0.75rem",
+            cursor: "pointer",
+            animation: "fadeIn 0.3s ease"
+          }}
+        >
+          <span style={{ fontSize: "1.5rem" }}>✅</span>
+          <div>
+            <strong style={{ color: "#166534" }}>
+              Scanner integration successful: {ocrToast.itemCount} item{ocrToast.itemCount !== 1 ? 's' : ''} automatically added.
+            </strong>
+            <p style={{ fontSize: "0.8rem", color: "#15803d", marginTop: "0.25rem" }}>
+              Confidence: {ocrToast.confidence}. Please verify descriptions and pricing. Click to dismiss.
+            </p>
+            {ocrToast.warnings.length > 0 && (
+              <p style={{ fontSize: "0.75rem", color: "#a16207", marginTop: "0.25rem" }}>
+                ⚠️ {ocrToast.warnings.join(" • ")}
+              </p>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Edit Mode Banner */}
+      {isEditMode && step === 2 && (
+        <div style={{
+          padding: "0.75rem 1.5rem",
+          backgroundColor: "#eff6ff",
+          border: "1px solid #bfdbfe",
+          borderRadius: "var(--radius-md)",
+          display: "flex",
+          alignItems: "center",
+          gap: "0.5rem",
+          fontSize: "0.85rem",
+          color: "#1e40af"
+        }}>
+          <span style={{ fontSize: "1.2rem" }}>✏️</span>
+          <strong>Edit Mode</strong> — You are editing an existing invoice. Changes will update the original record.
+        </div>
+      )}
 
       {/* Step 1: Upload Receipts & Initial OCR Scanning */}
       {step === 1 && !isScanning && (
@@ -468,9 +552,9 @@ export default function BillGenerator({ onSaveInvoice, onCancel, lang = "en", cu
           {/* Left Panel: Invoice Details & Items Form Editor */}
           <div className="section-container form-section">
             <div>
-              <h2 style={{ fontSize: "1.2rem", marginBottom: "0.25rem" }}>{t.refineTitle}</h2>
+              <h2 style={{ fontSize: "1.2rem", marginBottom: "0.25rem" }}>{isEditMode ? "Edit Invoice Details" : t.refineTitle}</h2>
               <p style={{ color: "var(--text-muted)", fontSize: "0.85rem" }}>
-                {t.refineSubtitle}
+                {isEditMode ? "Modify the fields below and save to update the original invoice." : t.refineSubtitle}
               </p>
             </div>
 
@@ -589,6 +673,7 @@ export default function BillGenerator({ onSaveInvoice, onCancel, lang = "en", cu
                       onChange={(e) => handleItemChange(item.id, "description", e.target.value)}
                       placeholder="Consulting services..."
                       style={{ padding: "0.4rem 0.6rem", fontSize: "0.85rem" }}
+                      data-label="Description"
                     />
                     {invoiceData.gstRegime !== "standard" && (
                       <input 
@@ -597,6 +682,7 @@ export default function BillGenerator({ onSaveInvoice, onCancel, lang = "en", cu
                         onChange={(e) => handleItemChange(item.id, "hsnCode", e.target.value)}
                         placeholder="HSN/SAC Code"
                         style={{ padding: "0.4rem 0.6rem", fontSize: "0.85rem", textAlign: "center", fontFamily: "monospace" }}
+                        data-label="HSN"
                       />
                     )}
                     <input 
@@ -605,12 +691,14 @@ export default function BillGenerator({ onSaveInvoice, onCancel, lang = "en", cu
                       value={item.quantity}
                       onChange={(e) => handleItemChange(item.id, "quantity", e.target.value)}
                       style={{ padding: "0.4rem 0.6rem", fontSize: "0.85rem", textAlign: "center" }}
+                      data-label="Qty"
                     />
                     <input 
                       type="text"
                       value={item.unit || "PCS"}
                       onChange={(e) => handleItemChange(item.id, "unit", e.target.value)}
                       style={{ padding: "0.4rem 0.6rem", fontSize: "0.85rem", textAlign: "center", textTransform: "uppercase" }}
+                      data-label="Unit"
                     />
                     <input 
                       type="number"
@@ -619,8 +707,9 @@ export default function BillGenerator({ onSaveInvoice, onCancel, lang = "en", cu
                       value={item.rate}
                       onChange={(e) => handleItemChange(item.id, "rate", e.target.value)}
                       style={{ padding: "0.4rem 0.6rem", fontSize: "0.85rem", textAlign: "right" }}
+                      data-label="Rate"
                     />
-                    <span className="item-total text-right" style={{ fontWeight: "600" }}>
+                    <span className="item-total text-right" style={{ fontWeight: "600" }} data-label="Amount">
                       {(item.quantity * item.rate).toFixed(2)}
                     </span>
                     <button 
@@ -790,7 +879,7 @@ export default function BillGenerator({ onSaveInvoice, onCancel, lang = "en", cu
                 rows="4"
                 value={invoiceData.notes} 
                 onChange={(e) => handleInputChange("notes", e.target.value)}
-                placeholder="1. Goods once sold will not be taken back.&#10;2. Interest @ 18% p.a. will be charged if not paid within 7 days."
+                placeholder={"1. Goods once sold will not be taken back.\n2. Interest @ 18% p.a. will be charged if not paid within 7 days."}
               />
             </div>
 
@@ -800,13 +889,13 @@ export default function BillGenerator({ onSaveInvoice, onCancel, lang = "en", cu
                 {t.btnCancel}
               </button>
               <button className="btn btn-secondary" onClick={handleSaveOnly} style={{ flex: 1, minWidth: "120px" }}>
-                💾 Save Invoice
+                {saveLabel}
               </button>
               <button className="btn btn-secondary" onClick={handleShareInvoice} style={{ flex: 1, minWidth: "120px" }}>
                 🔗 {t.btnShare}
               </button>
               <button className="btn btn-accent" onClick={handleFinalizeAndPrint} style={{ flex: 1.8, minWidth: "160px" }}>
-                {t.btnSavePrint}
+                {printLabel}
               </button>
             </div>
           </div>

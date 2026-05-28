@@ -9,6 +9,7 @@ export default function Dashboard({
   onDeleteInvoice, 
   onPrintInvoice, 
   onShareInvoice,
+  onEditInvoice,
   onCopyInvoice
 }) {
   const [searchTerm, setSearchTerm] = useState("");
@@ -195,7 +196,15 @@ export default function Dashboard({
                       {formatCurrency(inv.total)}
                     </td>
                     <td style={{ textAlign: "center" }}>
-                      <div style={{ display: "flex", gap: "0.5rem", justifyContent: "center" }}>
+                      <div style={{ display: "flex", gap: "0.5rem", justifyContent: "center", flexWrap: "wrap" }}>
+                        <button 
+                          className="btn btn-secondary" 
+                          onClick={() => onEditInvoice(inv)}
+                          style={{ padding: "0.3rem 0.6rem", fontSize: "0.75rem", background: "#059669", color: "white", border: "none" }}
+                          title="Edit Invoice"
+                        >
+                          ✏️ Edit
+                        </button>
                         <button 
                           className="btn btn-secondary" 
                           onClick={() => onPrintInvoice(inv)}
@@ -216,7 +225,7 @@ export default function Dashboard({
                           className="btn btn-secondary" 
                           onClick={() => onCopyInvoice(inv)}
                           style={{ padding: "0.3rem 0.6rem", fontSize: "0.75rem", background: "#3b82f6", color: "white", border: "none" }}
-                          title="Edit / Create Copy"
+                          title="Create Copy"
                         >
                           Create Copy
                         </button>
