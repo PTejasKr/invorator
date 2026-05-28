@@ -67,7 +67,7 @@ export default function Dashboard({
     
     // CSV Header
     let csvContent = "data:text/csv;charset=utf-8,";
-    csvContent += "Invoice Number,Date,Vendor/Merchant,Subtotal,Tax Rate,Tax Amount,Total,Notes\n";
+    csvContent += `Invoice Number,Date,Vendor/Merchant,Subtotal (${currency}),Tax Rate,Tax Amount (${currency}),Total (${currency}),Notes\n`;
     
     // CSV Rows
     history.forEach(inv => {

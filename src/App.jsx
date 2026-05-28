@@ -23,6 +23,9 @@ export default function App() {
   // Temporary invoice state used for background printing layout
   const [activePrintInvoice, setActivePrintInvoice] = useState(null);
 
+  // Currency Conversion Loading State
+  const [isConvertingCurrency, setIsConvertingCurrency] = useState(false);
+
   // Load encrypted database on mount automatically
   useEffect(() => {
     const sysKey = getSystemMasterKey();
@@ -35,9 +38,66 @@ export default function App() {
     localStorage.setItem("_inv_lang", newLang);
   };
 
-  const handleCurrencyChange = (newCurr) => {
-    setCurrency(newCurr);
-    localStorage.setItem("_inv_currency", newCurr);
+  const handleCurrencyChange = async (newCurr) => {
+    if (newCurr === currency) return; // No change needed
+    
+    // Warn user if history exists
+    if (history.length > 0) {
+      const confirm = window.confirm(
+        `You are about to switch to ${newCurr}. This will update all your previously saved invoices using today's live market exchange rate. Proceed?`
+      );
+      if (!confirm) return;
+    }
+
+    setIsConvertingCurrency(true);
+    
+    try {
+      // 1. Fetch real-time exchange rate
+      // Using open API (exchangerate-api.com) for free access without keys
+      const res = await fetch(`https://api.exchangerate-api.com/v4/latest/${currency}`);
+      
+      if (!res.ok) throw new Error("Failed to fetch exchange rates");
+      
+      const data = await res.json();
+      const rate = data.rates[newCurr];
+      
+      if (!rate) throw new Error("Target currency rate not found");
+
+      // 2. Convert all historical data if any exists
+      if (history.length > 0) {
+        const sysKey = getSystemMasterKey();
+        const convertedHistory = history.map(inv => {
+          // Deep copy items to convert their individual values
+          const convertedItems = (inv.items || []).map(item => ({
+            ...item,
+            rate: Math.round((item.rate * rate) * 100) / 100,
+            total: Math.round((item.total * rate) * 100) / 100
+          }));
+
+          return {
+            ...inv,
+            currency: newCurr, // Update the currency tag on the invoice
+            subtotal: Math.round((inv.subtotal * rate) * 100) / 100,
+            taxAmount: Math.round((inv.taxAmount * rate) * 100) / 100,
+            total: Math.round((inv.total * rate) * 100) / 100,
+            items: convertedItems
+          };
+        });
+        
+        setHistory(convertedHistory);
+        await saveDatabase(convertedHistory, sysKey);
+      }
+      
+      // 3. Update global states
+      setCurrency(newCurr);
+      localStorage.setItem("_inv_currency", newCurr);
+      
+    } catch (err) {
+      console.error("Currency conversion error:", err);
+      alert("Failed to retrieve live market rates. Please check your internet connection.");
+    } finally {
+      setIsConvertingCurrency(false);
+    }
   };
 
   // Helper to load and decrypt historical invoices from local storage
@@ -190,12 +250,24 @@ export default function App() {
                 </select>
               </div>
               
-              <div className="control-group">
+              <div className="control-group" style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
                 <label>Cur:</label>
-                <select value={currency} onChange={(e) => handleCurrencyChange(e.target.value)} className="control-select">
+                <select 
+                  value={currency} 
+                  onChange={(e) => handleCurrencyChange(e.target.value)} 
+                  className="control-select"
+                  disabled={isConvertingCurrency}
+                >
                   <option value="USD">USD ($)</option>
                   <option value="INR">INR (₹)</option>
+                  <option value="EUR">EUR (€)</option>
+                  <option value="GBP">GBP (£)</option>
                 </select>
+                {isConvertingCurrency && (
+                  <span style={{ fontSize: "0.8rem", color: "var(--accent)", animation: "fadeIn 0.5s infinite alternate" }}>
+                    Converting...
+                  </span>
+                )}
               </div>
 
               {view !== "dashboard" && (
