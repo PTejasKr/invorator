@@ -2,13 +2,16 @@ import React, { useState, useEffect } from "react";
 import Dashboard from "./components/Dashboard";
 import BillGenerator from "./components/BillGenerator";
 import InvoicePreview from "./components/InvoicePreview";
+import DesignSelector from "./components/DesignSelector";
 import { encryptData, decryptData, getSystemMasterKey } from "./utils/encryption";
 import { languages } from "./utils/translations";
 import { captureInvoiceBlob, shareInvoice } from "./utils/imageExport";
 
 export default function App() {
-  const [view, setView] = useState("dashboard"); // "dashboard", "generator"
+  const [view, setView] = useState("dashboard"); // "dashboard", "designSelector", "generator"
   const [history, setHistory] = useState([]);
+  const [selectedDesign, setSelectedDesign] = useState(1);
+  const [initialInvoiceData, setInitialInvoiceData] = useState(null);
   
   // Global Bilingual & Currency preferences
   const [lang, setLang] = useState(() => localStorage.getItem("_inv_lang") || "en");
@@ -179,24 +182,45 @@ export default function App() {
 
         {/* Core Views Routing Dashboard & Editor */}
         <main style={{ minHeight: "70vh" }}>
-          {view === "dashboard" ? (
+          {view === "dashboard" && (
             <Dashboard 
               history={history}
               lang={lang}
               currency={currency}
-              onStartGenerator={() => setView("generator")}
+              onStartGenerator={() => {
+                setInitialInvoiceData(null);
+                setView("designSelector");
+              }}
+              onCopyInvoice={(inv) => {
+                setInitialInvoiceData(inv);
+                // Can optionally go to design selector or straight to generator. Let's go to design selector so they can pick a design for the copy too.
+                setView("designSelector");
+              }}
               onDeleteInvoice={handleDeleteInvoice}
               onPrintInvoice={handlePrintPastInvoice}
               onShareInvoice={handleSharePastInvoice}
             />
-            ) : (
-              <BillGenerator 
-                lang={lang}
-                currency={currency}
-                onSaveInvoice={handleSaveInvoice}
-                onCancel={() => setView("dashboard")}
-              />
-            )}
+          )}
+          {view === "designSelector" && (
+            <DesignSelector
+              lang={lang}
+              onSelectDesign={(designId) => {
+                setSelectedDesign(designId);
+                setView("generator");
+              }}
+              onCancel={() => setView("dashboard")}
+            />
+          )}
+          {view === "generator" && (
+            <BillGenerator 
+              lang={lang}
+              currency={currency}
+              initialData={initialInvoiceData}
+              selectedDesign={selectedDesign}
+              onSaveInvoice={handleSaveInvoice}
+              onCancel={() => setView("dashboard")}
+            />
+          )}
           </main>
       </div>
     </>

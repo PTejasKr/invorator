@@ -4,8 +4,13 @@ import { parseOCRText } from "../utils/ocrParser";
 import InvoicePreview from "./InvoicePreview";
 import { translations } from "../utils/translations";
 import { downloadInvoiceImage, shareInvoice } from "../utils/imageExport";
+import InvoicePreviewDesign2 from "./InvoicePreviewDesign2";
+import InvoicePreviewDesign3 from "./InvoicePreviewDesign3";
+import * as pdfjsLib from "pdfjs-dist";
 
-export default function BillGenerator({ onSaveInvoice, onCancel, lang = "en", currency = "USD" }) {
+pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
+
+export default function BillGenerator({ onSaveInvoice, onCancel, lang = "en", currency = "USD", initialData = null, selectedDesign = 1 }) {
   const [step, setStep] = useState(1); // 1 = Upload/Choose, 2 = Builder
   const [imagePreview, setImagePreview] = useState(null);
   const [isScanning, setIsScanning] = useState(false);
@@ -16,7 +21,7 @@ export default function BillGenerator({ onSaveInvoice, onCancel, lang = "en", cu
   const symbol = currency === "INR" ? "₹" : "$";
 
   // Invoice form state with GST additions
-  const [invoiceData, setInvoiceData] = useState({
+  const [invoiceData, setInvoiceData] = useState(initialData ? { ...initialData, id: undefined } : {
     vendorName: "",
     vendorAddress: "",
     vendorPhone: "",
@@ -68,160 +73,30 @@ export default function BillGenerator({ onSaveInvoice, onCancel, lang = "en", cu
     }));
   }, [invoiceData.items, invoiceData.taxRate]);
 
-  // Handle OCR Tesseract scanning
-  const processImage = (file) => {
+  // Handle OCR Tesseract scanning or PDF Parsing
+  const processFile = async (file) => {
     if (!file) return;
 
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      setImagePreview(e.target.result);
+    if (file.type === "application/pdf") {
       setIsScanning(true);
       setScanProgress(0);
-      setScanStatus("Initializing OCR Engine...");
+      setScanStatus("Parsing PDF text...");
 
-      Tesseract.recognize(
-        e.target.result,
-        "eng",
-        {
-          logger: (m) => {
-            if (m.status === "recognizing") {
-              setScanStatus("Analyzing document texts...");
-              setScanProgress(Math.round(m.progress * 100));
-            } else {
-              setScanStatus(m.status);
-            }
-          }
-        }
-      )
-        .then(({ data: { text } }) => {
-          setIsScanning(false);
-          setScanStatus("Completed successfully!");
-          const parsed = parseOCRText(text);
-          // Set initial items and calculated subtotal
-          setInvoiceData(prev => ({
-            ...prev,
-            ...parsed,
-            gstRegime: "standard",
-            taxRate: parsed.taxRate || 18,
-            items: parsed.items?.map(item => ({
-              ...item,
-              id: Date.now() + Math.random(),
-              hsnCode: "",
-              unit: "PCS"
-            })) || []
-          }));
-          setStep(2);
-        })
-        .catch((error) => {
-          console.error("OCR scanning error:", error);
-          setIsScanning(false);
-          alert("OCR analysis failed. Reverting to manual editor input.");
-          handleManualStart();
-        });
-    };
-    reader.readAsDataURL(file);
-  };
-
-  // Route file based on type (image or PDF)
-  const processFile = (file) => {
-    if (!file) return;
-    if (file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf")) {
-      processPdf(file);
-    } else if (file.type.startsWith("image/")) {
-      processImage(file);
-    } else {
-      alert("Unsupported file format. Please upload a PDF or an image.");
-    }
-  };
-
-  // Handle PDF text extraction and fallback OCR
-  const processPdf = (file) => {
-    if (!file) return;
-
-    setIsScanning(true);
-    setScanProgress(0);
-    setScanStatus("Loading PDF document...");
-
-    const reader = new FileReader();
-    reader.onload = async (e) => {
       try {
-        const arrayBuffer = e.target.result;
-
-        // Verify PDF.js library is loaded
-        if (!window.pdfjsLib) {
-          throw new Error("PDF.js library is not loaded. Please check your internet connection.");
-        }
-
-        // Configure PDF.js Worker
-        window.pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.worker.min.js";
-
-        const loadingTask = window.pdfjsLib.getDocument({ data: arrayBuffer });
+        const arrayBuffer = await file.arrayBuffer();
+        const loadingTask = pdfjsLib.getDocument({ data: arrayBuffer });
         const pdf = await loadingTask.promise;
-
-        // Render first page as canvas for step 1 preview image
-        try {
-          const firstPage = await pdf.getPage(1);
-          const viewport = firstPage.getPageViewport ? firstPage.getPageViewport({ scale: 1.0 }) : firstPage.getViewport({ scale: 1.0 });
-          const canvas = document.createElement("canvas");
-          const context = canvas.getContext("2d");
-          canvas.height = viewport.height;
-          canvas.width = viewport.width;
-          await firstPage.render({ canvasContext: context, viewport }).promise;
-          setImagePreview(canvas.toDataURL("image/png"));
-        } catch (previewError) {
-          console.warn("Failed to generate PDF page preview:", previewError);
-        }
-
         let fullText = "";
-        let hasDigitalText = false;
-
-        // First pass: extract digital text
-        setScanStatus("Scanning for digital text...");
-        for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
-          const page = await pdf.getPage(pageNum);
+        for (let i = 1; i <= pdf.numPages; i++) {
+          const page = await pdf.getPage(i);
           const textContent = await page.getTextContent();
           const pageText = textContent.items.map(item => item.str).join(" ");
-          if (pageText.trim().length > 10) {
-            fullText += pageText + "\n";
-            hasDigitalText = true;
-          }
+          fullText += pageText + "\n";
         }
-
-        // Second pass: if no digital text, render pages to canvas and perform OCR
-        if (!hasDigitalText) {
-          setScanStatus("No digital text found. Performing OCR on PDF pages...");
-          for (let pageNum = 1; pageNum <= Math.min(pdf.numPages, 3); pageNum++) {
-            setScanStatus(`Rendering page ${pageNum} for OCR...`);
-            const page = await pdf.getPage(pageNum);
-            
-            // Higher scale (2.0) for better OCR recognition quality
-            const viewport = page.getPageViewport ? page.getPageViewport({ scale: 2.0 }) : page.getViewport({ scale: 2.0 });
-            const canvas = document.createElement("canvas");
-            const context = canvas.getContext("2d");
-            canvas.height = viewport.height;
-            canvas.width = viewport.width;
-            await page.render({ canvasContext: context, viewport }).promise;
-
-            setScanStatus(`OCR analyzing page ${pageNum}...`);
-            const { data: { text } } = await Tesseract.recognize(
-              canvas,
-              "eng",
-              {
-                logger: (m) => {
-                  if (m.status === "recognizing") {
-                    setScanProgress(Math.round(m.progress * 100));
-                  }
-                }
-              }
-            );
-            fullText += text + "\n";
-          }
-        }
-
+        
         setIsScanning(false);
         setScanStatus("Completed successfully!");
         const parsed = parseOCRText(fullText);
-
         setInvoiceData(prev => ({
           ...prev,
           ...parsed,
@@ -235,15 +110,60 @@ export default function BillGenerator({ onSaveInvoice, onCancel, lang = "en", cu
           })) || []
         }));
         setStep(2);
-
-      } catch (error) {
-        console.error("PDF processing error:", error);
+      } catch (err) {
+        console.error("PDF Parsing failed", err);
         setIsScanning(false);
-        alert(`PDF analysis failed: ${error.message || error}. Reverting to manual editor.`);
-        handleManualStart();
+        setScanStatus("Failed to parse PDF.");
       }
-    };
-    reader.readAsArrayBuffer(file);
+    } else {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        setImagePreview(e.target.result);
+        setIsScanning(true);
+        setScanProgress(0);
+        setScanStatus("Initializing OCR Engine...");
+
+        Tesseract.recognize(
+          e.target.result,
+          "eng",
+          {
+            logger: (m) => {
+              if (m.status === "recognizing") {
+                setScanStatus("Analyzing document texts...");
+                setScanProgress(Math.round(m.progress * 100));
+              } else {
+                setScanStatus(m.status);
+              }
+            }
+          }
+        )
+          .then(({ data: { text } }) => {
+            setIsScanning(false);
+            setScanStatus("Completed successfully!");
+            const parsed = parseOCRText(text);
+            // Set initial items and calculated subtotal
+            setInvoiceData(prev => ({
+              ...prev,
+              ...parsed,
+              gstRegime: "standard",
+              taxRate: parsed.taxRate || 18,
+              items: parsed.items?.map(item => ({
+                ...item,
+                id: Date.now() + Math.random(),
+                hsnCode: "",
+                unit: "PCS"
+              })) || []
+            }));
+            setStep(2);
+          })
+          .catch((error) => {
+            console.error(error);
+            setIsScanning(false);
+            setScanStatus("Error scanning document.");
+          });
+      };
+      reader.readAsDataURL(file);
+    }
   };
 
   const handleDragOver = (e) => {
@@ -880,7 +800,9 @@ export default function BillGenerator({ onSaveInvoice, onCancel, lang = "en", cu
               </span>
             </div>
             <div className="preview-scale-wrapper">
-              <InvoicePreview data={invoiceData} lang={lang} currency={currency} />
+              {selectedDesign === 1 && <InvoicePreview data={invoiceData} lang={lang} currency={currency} />}
+              {selectedDesign === 2 && <InvoicePreviewDesign2 data={invoiceData} lang={lang} currency={currency} />}
+              {selectedDesign === 3 && <InvoicePreviewDesign3 data={invoiceData} lang={lang} currency={currency} />}
             </div>
           </div>
         </div>

@@ -8,7 +8,8 @@ export default function Dashboard({
   onStartGenerator, 
   onDeleteInvoice, 
   onPrintInvoice, 
-  onShareInvoice 
+  onShareInvoice,
+  onCopyInvoice
 }) {
   const [searchTerm, setSearchTerm] = useState("");
   const t = translations[lang] || translations["en"];
@@ -210,6 +211,14 @@ export default function Dashboard({
                           title="Share Invoice"
                         >
                           Share
+                        </button>
+                        <button 
+                          className="btn btn-secondary" 
+                          onClick={() => onCopyInvoice(inv)}
+                          style={{ padding: "0.3rem 0.6rem", fontSize: "0.75rem", background: "#f59e0b", color: "white", border: "none" }}
+                          title="Copy Record"
+                        >
+                          Copy
                         </button>
                         <button 
                           className="btn btn-danger" 
