@@ -148,7 +148,7 @@ export default function App() {
         <header className="app-header">
           <div className="brand-section" onClick={() => setView("dashboard")} style={{ cursor: "pointer" }}>
             <div className="brand-title">
-              <h1 className="premium-logo">invorator.</h1>
+              <h1 className="premium-logo" style={{ fontFamily: "'Great Vibes', cursive", fontSize: "3.5rem", textTransform: "uppercase", letterSpacing: "2px", fontWeight: "400" }}>INVORATOR</h1>
             </div>
           </div>
           
