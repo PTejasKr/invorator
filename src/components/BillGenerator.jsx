@@ -122,6 +122,130 @@ export default function BillGenerator({ onSaveInvoice, onCancel, lang = "en", cu
     reader.readAsDataURL(file);
   };
 
+  // Route file based on type (image or PDF)
+  const processFile = (file) => {
+    if (!file) return;
+    if (file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf")) {
+      processPdf(file);
+    } else if (file.type.startsWith("image/")) {
+      processImage(file);
+    } else {
+      alert("Unsupported file format. Please upload a PDF or an image.");
+    }
+  };
+
+  // Handle PDF text extraction and fallback OCR
+  const processPdf = (file) => {
+    if (!file) return;
+
+    setIsScanning(true);
+    setScanProgress(0);
+    setScanStatus("Loading PDF document...");
+
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+      try {
+        const arrayBuffer = e.target.result;
+
+        // Verify PDF.js library is loaded
+        if (!window.pdfjsLib) {
+          throw new Error("PDF.js library is not loaded. Please check your internet connection.");
+        }
+
+        // Configure PDF.js Worker
+        window.pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.worker.min.js";
+
+        const loadingTask = window.pdfjsLib.getDocument({ data: arrayBuffer });
+        const pdf = await loadingTask.promise;
+
+        // Render first page as canvas for step 1 preview image
+        try {
+          const firstPage = await pdf.getPage(1);
+          const viewport = firstPage.getPageViewport ? firstPage.getPageViewport({ scale: 1.0 }) : firstPage.getViewport({ scale: 1.0 });
+          const canvas = document.createElement("canvas");
+          const context = canvas.getContext("2d");
+          canvas.height = viewport.height;
+          canvas.width = viewport.width;
+          await firstPage.render({ canvasContext: context, viewport }).promise;
+          setImagePreview(canvas.toDataURL("image/png"));
+        } catch (previewError) {
+          console.warn("Failed to generate PDF page preview:", previewError);
+        }
+
+        let fullText = "";
+        let hasDigitalText = false;
+
+        // First pass: extract digital text
+        setScanStatus("Scanning for digital text...");
+        for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
+          const page = await pdf.getPage(pageNum);
+          const textContent = await page.getTextContent();
+          const pageText = textContent.items.map(item => item.str).join(" ");
+          if (pageText.trim().length > 10) {
+            fullText += pageText + "\n";
+            hasDigitalText = true;
+          }
+        }
+
+        // Second pass: if no digital text, render pages to canvas and perform OCR
+        if (!hasDigitalText) {
+          setScanStatus("No digital text found. Performing OCR on PDF pages...");
+          for (let pageNum = 1; pageNum <= Math.min(pdf.numPages, 3); pageNum++) {
+            setScanStatus(`Rendering page ${pageNum} for OCR...`);
+            const page = await pdf.getPage(pageNum);
+            
+            // Higher scale (2.0) for better OCR recognition quality
+            const viewport = page.getPageViewport ? page.getPageViewport({ scale: 2.0 }) : page.getViewport({ scale: 2.0 });
+            const canvas = document.createElement("canvas");
+            const context = canvas.getContext("2d");
+            canvas.height = viewport.height;
+            canvas.width = viewport.width;
+            await page.render({ canvasContext: context, viewport }).promise;
+
+            setScanStatus(`OCR analyzing page ${pageNum}...`);
+            const { data: { text } } = await Tesseract.recognize(
+              canvas,
+              "eng",
+              {
+                logger: (m) => {
+                  if (m.status === "recognizing") {
+                    setScanProgress(Math.round(m.progress * 100));
+                  }
+                }
+              }
+            );
+            fullText += text + "\n";
+          }
+        }
+
+        setIsScanning(false);
+        setScanStatus("Completed successfully!");
+        const parsed = parseOCRText(fullText);
+
+        setInvoiceData(prev => ({
+          ...prev,
+          ...parsed,
+          gstRegime: "standard",
+          taxRate: parsed.taxRate || 18,
+          items: parsed.items?.map(item => ({
+            ...item,
+            id: Date.now() + Math.random(),
+            hsnCode: "",
+            unit: "PCS"
+          })) || []
+        }));
+        setStep(2);
+
+      } catch (error) {
+        console.error("PDF processing error:", error);
+        setIsScanning(false);
+        alert(`PDF analysis failed: ${error.message || error}. Reverting to manual editor.`);
+        handleManualStart();
+      }
+    };
+    reader.readAsArrayBuffer(file);
+  };
+
   const handleDragOver = (e) => {
     e.preventDefault();
     e.currentTarget.classList.add("drag-over");
@@ -136,17 +260,19 @@ export default function BillGenerator({ onSaveInvoice, onCancel, lang = "en", cu
     e.preventDefault();
     e.currentTarget.classList.remove("drag-over");
     const file = e.dataTransfer.files[0];
-    if (file && file.type.startsWith("image/")) {
-      processImage(file);
-    } else {
-      alert("Please upload a supported image file.");
+    if (file) {
+      if (file.type.startsWith("image/") || file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf")) {
+        processFile(file);
+      } else {
+        alert("Please upload a supported image or PDF file.");
+      }
     }
   };
 
   const handleFileSelect = (e) => {
     const file = e.target.files[0];
     if (file) {
-      processImage(file);
+      processFile(file);
     }
   };
 
@@ -350,7 +476,7 @@ export default function BillGenerator({ onSaveInvoice, onCancel, lang = "en", cu
                 type="file" 
                 ref={fileInputRef} 
                 onChange={handleFileSelect} 
-                accept="image/*" 
+                accept="image/*,application/pdf" 
                 style={{ display: "none" }}
               />
             </div>
