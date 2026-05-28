@@ -21,7 +21,17 @@ export default function BillGenerator({ onSaveInvoice, onCancel, lang = "en", cu
   const symbol = currency === "INR" ? "₹" : "$";
 
   // Invoice form state with GST additions
-  const [invoiceData, setInvoiceData] = useState(initialData ? { ...initialData, id: undefined } : {
+  const [invoiceData, setInvoiceData] = useState(() => {
+    if (initialData) return { ...initialData, id: undefined };
+    
+    const savedDraft = localStorage.getItem("invorator_draft");
+    if (savedDraft) {
+      try {
+        return JSON.parse(savedDraft);
+      } catch(e) {}
+    }
+    
+    return {
     vendorName: "",
     vendorAddress: "",
     vendorPhone: "",
@@ -55,7 +65,15 @@ export default function BillGenerator({ onSaveInvoice, onCancel, lang = "en", cu
     accountNumber: "",
     ifscCode: "",
     branchName: ""
+    };
   });
+
+  // Auto-save draft on every change
+  useEffect(() => {
+    if (invoiceData) {
+      localStorage.setItem("invorator_draft", JSON.stringify(invoiceData));
+    }
+  }, [invoiceData]);
 
   const fileInputRef = useRef(null);
 
@@ -294,6 +312,7 @@ export default function BillGenerator({ onSaveInvoice, onCancel, lang = "en", cu
       return;
     }
     
+    localStorage.removeItem("invorator_draft");
     onSaveInvoice({
       ...invoiceData,
       currency: currency
@@ -336,6 +355,7 @@ export default function BillGenerator({ onSaveInvoice, onCancel, lang = "en", cu
       return;
     }
     
+    localStorage.removeItem("invorator_draft");
     // Save generated invoice to history vault
     onSaveInvoice({
       ...invoiceData,
