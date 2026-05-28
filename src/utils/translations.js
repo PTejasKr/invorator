@@ -113,7 +113,8 @@ export const translations = {
     ifscCode: "IFSC Code",
     branchName: "Branch Name",
     termsConditions: "Terms & Conditions (One per line)",
-    unitOfMeasurement: "Unit"
+    unitOfMeasurement: "Unit",
+    copyFromClient: "Copy from Client"
   },
   hi: {
     dashboardTitle: "इन्वोसेफ डैशबोर्ड",
@@ -213,7 +214,8 @@ export const translations = {
     ifscCode: "IFSC कोड",
     branchName: "शाखा का नाम",
     termsConditions: "नियम व शर्तें (प्रति पंक्ति एक)",
-    unitOfMeasurement: "इकाई (Unit)"
+    unitOfMeasurement: "इकाई (Unit)",
+    copyFromClient: "ग्राहक से कॉपी करें"
   },
   ta: {
     dashboardTitle: "இன்வோசேஃப் டாஷ்போர்டு",
@@ -313,7 +315,8 @@ export const translations = {
     ifscCode: "IFSC Code",
     branchName: "Branch Name",
     termsConditions: "Terms & Conditions (One per line)",
-    unitOfMeasurement: "Unit"
+    unitOfMeasurement: "Unit",
+    copyFromClient: "வாடிக்கையாளரிடமிருந்து நகலெடு"
   },
   te: {
     dashboardTitle: "ఇన్వోసేఫ్ డాష్‌బోర్డ్",
@@ -413,7 +416,8 @@ export const translations = {
     ifscCode: "IFSC Code",
     branchName: "Branch Name",
     termsConditions: "Terms & Conditions (One per line)",
-    unitOfMeasurement: "Unit"
+    unitOfMeasurement: "Unit",
+    copyFromClient: "క్లయింట్ నుండి కాపీ చేయి"
   },
   bn: {
     dashboardTitle: "ইনভোসেফ ড্যাশবোর্ড",
@@ -513,7 +517,8 @@ export const translations = {
     ifscCode: "IFSC Code",
     branchName: "Branch Name",
     termsConditions: "Terms & Conditions (One per line)",
-    unitOfMeasurement: "Unit"
+    unitOfMeasurement: "Unit",
+    copyFromClient: "ক্লায়েন্ট থেকে কপি করুন"
   },
   mr: {
     dashboardTitle: "इन्वोसेफ डॅशबोर्ड",
@@ -613,7 +618,8 @@ export const translations = {
     ifscCode: "IFSC Code",
     branchName: "Branch Name",
     termsConditions: "Terms & Conditions (One per line)",
-    unitOfMeasurement: "Unit"
+    unitOfMeasurement: "Unit",
+    copyFromClient: "ग्राहकाकडून कॉपी करा"
   },
   gu: {
     dashboardTitle: "ઇન્વોસેફ ડેશબોર્ડ",
@@ -713,6 +719,7 @@ export const translations = {
     ifscCode: "IFSC Code",
     branchName: "Branch Name",
     termsConditions: "Terms & Conditions (One per line)",
-    unitOfMeasurement: "Unit"
+    unitOfMeasurement: "Unit",
+    copyFromClient: "ગ્રાહકમાંથી કોપી કરો"
   }
 };

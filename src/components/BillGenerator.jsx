@@ -27,7 +27,7 @@ export default function BillGenerator({ onSaveInvoice, onCancel, lang = "en", cu
     clientAddress: "",
     clientState: "",
     clientStateCode: "",
-    consigneeSameAsClient: true,
+    consigneeSameAsClient: false,
     consigneeName: "",
     consigneeAddress: "",
     consigneeGSTIN: "",
@@ -644,10 +644,18 @@ export default function BillGenerator({ onSaveInvoice, onCancel, lang = "en", cu
               </div>
 
               <h3 style={{ fontSize: "0.95rem", marginBottom: "1rem", marginTop: "1.5rem" }}>{t.consigneeDetails}</h3>
-              <label style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "1rem", fontSize: "0.85rem", cursor: "pointer" }}>
-                <input type="checkbox" checked={invoiceData.consigneeSameAsClient} onChange={(e) => handleInputChange("consigneeSameAsClient", e.target.checked)} />
-                {t.sameAsClient}
-              </label>
+              <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "1rem", fontSize: "0.85rem" }}>
+                  <input type="checkbox" checked={invoiceData.consigneeSameAsClient} onChange={(e) => handleInputChange("consigneeSameAsClient", e.target.checked)} />
+                  {t.sameAsClient}
+                  <button type="button" className="btn btn-secondary" style={{ marginLeft: "auto" }} onClick={() => {
+                    handleInputChange("consigneeName", invoiceData.clientName);
+                    handleInputChange("consigneeAddress", invoiceData.clientAddress);
+                    handleInputChange("consigneeGSTIN", invoiceData.gstinBuyer);
+                    handleInputChange("consigneeState", invoiceData.clientState);
+                    handleInputChange("consigneeStateCode", invoiceData.clientStateCode);
+                    handleInputChange("consigneeSameAsClient", false);
+                  }}>{t.copyFromClient}</button>
+                </div>
 
               {!invoiceData.consigneeSameAsClient && (
                 <>
